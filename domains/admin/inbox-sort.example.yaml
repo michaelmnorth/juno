@@ -1,0 +1,14 @@
+# How tools/inbox.py sorts mail before any model sees it. Copy to inbox-sort.yaml (kept on this PC, not in git).
+# Intents: schedule, reply-needed, bill, receipt, subscription, newsletter, family, urgent, noise.
+# People with a profile in people/ always go to Sorter, whatever these rules say. A "bill" rule also goes to Sorter,
+# which copies the amount and due date.
+
+senders:            # exact address, or @domain for everything from that domain
+  "statements@bank.example": bill
+  "@shop.example": receipt
+  "news@blog.example": newsletter
+
+labels:             # your own Gmail labels; "Parent/*" also matches its sublabels
+  "Family": family
+  "Bills/*": bill
+  "Orders/*": receipt

@@ -1,0 +1,16 @@
+name: tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  pytest:
+    # Windows, like the PC the bridge runs on (paths, CREATE_NO_WINDOW, zoneinfo data).
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m pip install -r gateway/requirements.txt -r tools/requirements.txt
+      - run: python -m pytest -q

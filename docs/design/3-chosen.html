@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>3 Approval card, chosen</title><link rel="stylesheet" href="kit.css"></head>
+<body>
+<div class="row">
+<div class="phone">
+  <div class="note chosen"><div class="top"><div class="letter">3</div><div class="title">Chosen: B + C</div></div>
+    <div class="idea">C's plain question on top, B's facts grid under it. Answer buttons named for the action, the rest in ⋯. Expired keeps the facts and asks if you still want it.</div>
+    <div class="kit">Block Kit: section, section (fields), actions (button, overflow); chat.update on expiry</div></div>
+  <div class="chrome"></div>
+  <div class="msgs">
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>Okay to invite Dana to the market, Saturday 10 to 12?</b></div>
+      <div class="fields">
+        <div><b>What</b><br>Market with Dana<br>Sat 10:00 AM to 12:00 PM</div>
+        <div><b>Invites</b><br>Dana, Friend<br>dana@example.com</div>
+        <div><b>Changes</b><br>Your calendar, and Dana gets an invite</div>
+        <div><b>Expires</b><br>9:44 AM</div>
+      </div>
+      <div class="acts"><span class="btn p">Yes, invite</span><span class="btn">Not now</span><span class="btn o">⋯</span></div>
+      <div class="ctx">⋯ holds Other time. No Always: invites always ask.</div>
+    </div></div>
+    <div class="state">Same message, 30 min later</div>
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><s>Okay to invite Dana to the market, Saturday 10 to 12?</s></div>
+      <div class="fields">
+        <div><b>What</b><br>Market with Dana<br>Sat 10:00 AM to 12:00 PM</div>
+        <div><b>Invites</b><br>Dana, Friend<br>dana@example.com</div>
+      </div>
+      <div class="ctx"><span class="dot gr"></span><span>Expired 9:44 AM. Nothing changed, no invite sent.</span></div>
+      <div class="s">Still want it?</div>
+      <div class="acts"><span class="btn p">Yes, ask again</span><span class="btn">No, drop it</span></div>
+    </div></div>
+  </div>
+</div>
+</div>
+<script src="chrome.js"></script>
+</body></html>

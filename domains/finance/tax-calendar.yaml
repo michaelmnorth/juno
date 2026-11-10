@@ -1,0 +1,19 @@
+# Constants the finance agent may use. Each has a source and date. Update yearly; the agent refuses stale ones.
+tax_year: 2026
+estimated_tax_due: ["2026-04-15", "2026-06-15", "2026-09-15", "2027-01-15"]   # Form 1040-ES; 2027 schedule pending Pub 509
+se_tax_rate: 0.153
+se_net_earnings_factor: 0.9235          # standard Schedule SE figure; not on the IRS page fetched 2026-11-06
+social_security_wage_base: 184500       # IRS, 2026
+additional_medicare_threshold_single: 200000
+limits_2026:
+  k401_deferral: 24500                  # IR-2025-111
+  ira: 7500                             # IR-2025-111
+  dc_total_415c: 72000                  # secondary sources citing Notice 2025-67; confirm
+  comp_cap: 360000                      # same
+  sep_pct: 0.25
+standard_deduction_single: 16100        # IRS 2026 inflation adjustments
+qbi_threshold_single: 201750            # sources conflict; confirm with Rev. Proc. 2025-32
+home_office_simplified_per_sqft: 5
+home_office_simplified_max_sqft: 300
+sources_checked: "2026-11-06"
+disclaimer: "I am an AI assistant, not a licensed tax, financial or investment advisor. Figures are estimates from IRS publications dated 2026-11-06. Confirm with a CPA before filing or paying."

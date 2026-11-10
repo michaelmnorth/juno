@@ -1,0 +1,105 @@
+# profile.example.yaml — a scrubbed starting point. Copy into an instance directory and edit.
+# The loader refuses unknown keys. Nothing here is a secret; secrets live in the vault.
+# Model IDs and prices were current on 2026-11-09. Verify before use.
+
+profile:
+  id: personal                      # one profile per person-context: personal | work | <student>
+  owner:
+    display_name: "Your Name"
+    timezone: "America/New_York"
+    locale: "en-US"
+  persona: persona.md               # the assistant's voice; operator text
+  core_card: core-card.md           # ≤ 1,200 tokens; the only memory that is always loaded
+  mode: shadow                      # shadow | live. New instances start in shadow.
+
+channels:
+  - type: slack
+    mode: socket                    # outbound connection only; no inbound port
+    owner_user_id: "U0000000000"    # the only identity whose messages and taps are accepted
+    primary: true
+    unfurl: false                   # links and media never unfurl
+
+packs:                              # a profile enables and narrows packs; it cannot widen them
+  mail:
+    provider: gmail
+    capabilities: [read, label, draft, send_with_tap]
+  calendar:
+    provider: google
+    capabilities: [read, hold, event_with_tap]
+  people: {}
+  reminders: {}
+  research:
+    max_searches_per_run: 5
+    blocked_domains: []
+  # health_hevy:
+  #   automations: [workout_to_coach_sheet]   # deterministic; declared here, reviewed like code
+
+policy:
+  quiet_hours: ["22:00", "06:00"]
+  pings_per_day: 5
+  approvals:
+    default_ttl_hours: 24
+  budgets:
+    call_usd: 0.05
+    run_usd: 0.50
+    run_max_model_calls: 8
+    task_usd: 2.00
+    day_usd: 3.00
+    month_alert_usd: 40
+  data_classes:
+    finance: { allow_run_classes: [converse, reflect], tainted: deny }
+    health:  { allow_run_classes: [converse, reflect], tainted: deny }
+  autonomy: []                      # earned-autonomy shapes; added only by the owner
+
+context:
+  budgets_tokens:                   # see 03-CONTEXT-AND-COST.md
+    tools: 1500
+    constitution: 700
+    core: 1200
+    playbook: 900
+    operator: 150
+    snapshot: 300
+    memory: 1200
+    thread_summary: 400
+    working_set: 200
+    recent_turns: 1500
+    tool_result_default: 800
+
+models:                             # pin exact IDs; a change must pass the eval suite
+  router:           { model: claude-haiku-5-5 }
+  reader:           { model: claude-haiku-5-5 }
+  converse:         { model: claude-sonnet-5-5, effort: low }
+  compose:          { model: claude-sonnet-5-5, effort: medium }
+  reflect_nightly:  { model: claude-sonnet-5-5, lane: batch }
+  reflect_weekly:   { model: claude-opus-5-5,   lane: batch }
+
+schedules:
+  - { id: morning_brief,   cron: "0 7 * * *",   playbook: morning-brief }
+  - { id: evening_checkin, cron: "30 20 * * *", playbook: evening-checkin }
+  - { id: consolidate,     cron: "30 2 * * *",  lane: batch }
+  - { id: weekly_review,   cron: "0 18 * * 0",  lane: batch }
+
+pollers:
+  gmail_history_seconds: 90
+  calendar_sync_seconds: 300
+
+egress_allow:                       # everything else is dropped at the network layer
+  - api.anthropic.com
+  - slack.com
+  - wss-primary.slack.com
+  - www.googleapis.com
+  - gmail.googleapis.com
+  - oauth2.googleapis.com
+  # plus the secrets backend, backup target and heartbeat monitor you choose
+
+secrets:
+  backend: 1password
+  vault: "Agent-Secrets"
+
+backup:
+  target: "<encrypted off-box location>"
+  retain_days: 30
+
+heartbeat:
+  url_secret_ref: "heartbeat_url"   # resolved from the vault at start
+  interval_seconds: 300

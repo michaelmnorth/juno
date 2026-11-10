@@ -1,0 +1,16 @@
+# Phase 0/1: hooks and tests only
+pytest>=8
+
+# youtube subagent (Reel), pinned 2026-11-07; yt-dlp uses Node as its JavaScript runtime
+yt-dlp==2026.10.26
+youtube-transcript-api==1.2.5
+
+# Phase 2 (uncomment as each lands)
+# pyyaml
+# pydantic>=2
+# tzdata
+# gspread ; google-auth           # coach sheet (Phase 4a)
+# requests                        # Hevy / Withings / SimpleFIN pulls
+# plaid-python                    # Phase 4b
+# claude-agent-sdk                # Phase 5 gateway
+# apscheduler                     # Phase 5 gateway

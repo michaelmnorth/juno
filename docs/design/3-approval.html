@@ -1,0 +1,102 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>3 Approval card</title><link rel="stylesheet" href="kit.css"></head>
+<body>
+<div class="lbl">3 Approval card: waiting, then the same message 30 minutes later</div>
+<div class="row">
+
+<!-- A -->
+<div class="phone">
+  <div class="note"><div class="top"><div class="letter">A</div><div class="title">Today's card</div></div>
+    <div class="idea">What the bridge sends now. Juno's summary, Action and Invites in italics, two buttons. On expiry the line changes and the buttons go.</div>
+    <div class="kit">Block Kit: section, actions; chat.update on expiry</div></div>
+  <div class="chrome"></div>
+  <div class="msgs">
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>Needs your OK</b><br>Invite Dana to the market, Saturday 10:00 AM to 12:00 PM.<br><i>Action:</i> create event "Market with Dana"<br><i>Invites:</i> dana@example.com<br><i>Expires in 30 minutes.</i></div>
+      <div class="acts"><span class="btn p">Allow once</span><span class="btn d">Deny</span></div>
+    </div></div>
+    <div class="state">Same message, 30 min later</div>
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>Needs your OK</b><br>Invite Dana to the market, Saturday 10:00 AM to 12:00 PM.<br><i>Action:</i> create event "Market with Dana"<br><i>Invites:</i> dana@example.com<br><i>Expired at 9:44 AM. Nothing was done.</i></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="phone">
+  <div class="note"><div class="top"><div class="letter">B</div><div class="title">Facts grid, Ask again</div></div>
+    <div class="idea">Your draft-card rules applied: a facts grid, Allow once up front, the rest in ⋯. Expired keeps the facts and offers one button to bring it back.</div>
+    <div class="kit">Block Kit: section, section (fields), actions (button, overflow)</div></div>
+  <div class="chrome"></div>
+  <div class="msgs">
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>Invite Dana to the market?</b></div>
+      <div class="fields">
+        <div><b>What</b><br>Market with Dana<br>Sat 10:00 AM to 12:00 PM</div>
+        <div><b>Invites</b><br>Dana, Friend<br>dana@example.com</div>
+        <div><b>Changes</b><br>Your calendar, and Dana gets an invite</div>
+        <div><b>Expires</b><br>9:44 AM</div>
+      </div>
+      <div class="acts"><span class="btn p">Allow once</span><span class="btn">Deny</span><span class="btn o">⋯</span></div>
+      <div class="ctx">⋯ holds Change the time. No Always: invites always ask.</div>
+    </div></div>
+    <div class="state">Same message, 30 min later</div>
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>Invite Dana to the market?</b></div>
+      <div class="fields">
+        <div><b>What</b><br>Market with Dana<br>Sat 10:00 AM to 12:00 PM</div>
+        <div><b>Invites</b><br>Dana, Friend<br>dana@example.com</div>
+      </div>
+      <div class="ctx"><span class="dot gr"></span><span>Expired 9:44 AM. Nothing changed, no invite sent.</span></div>
+      <div class="acts"><span class="btn">Ask again</span></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- C -->
+<div class="phone">
+  <div class="note"><div class="top"><div class="letter">C</div><div class="title">One question, Options</div></div>
+    <div class="idea">Juno asks like a person: one sentence and answer buttons (idea 11). The bridge adds one facts line under it. Expired asks if you still want it.</div>
+    <div class="kit">Block Kit: section, context (image + text), actions</div></div>
+  <div class="chrome"></div>
+  <div class="msgs">
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s">Okay to invite Dana to the market, Saturday 10 to 12? She gets a calendar invite.</div>
+      <div class="ctx"><span class="dot g"></span><span>Reaches dana@example.com · Friend · expires 9:44 AM</span></div>
+      <div class="acts"><span class="btn p">Yes, invite</span><span class="btn">Not now</span><span class="btn">Other time</span></div>
+    </div></div>
+    <div class="state">Same message, 30 min later</div>
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><s>Okay to invite Dana to the market, Saturday 10 to 12?</s><br>That one timed out at 9:44. Nothing sent. Still want it?</div>
+      <div class="acts"><span class="btn p">Yes, ask again</span><span class="btn">No, drop it</span></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- D -->
+<div class="phone">
+  <div class="note"><div class="top"><div class="letter">D</div><div class="title">Grouped</div></div>
+    <div class="idea">When a sweep needs several OKs, one card with a row each. Each row has its own button. Expired rows say so; the others stay live.</div>
+    <div class="kit">Block Kit: section + button per row, context, actions</div></div>
+  <div class="chrome"></div>
+  <div class="msgs">
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>3 things want your OK</b></div>
+      <div class="sec"><div class="grow"><div class="s">Invite Dana to the market, Sat 10 to 12</div><div class="ctx">Dana, Friend · expires 9:44</div></div><span class="btn p">Allow</span></div>
+      <div class="sec"><div class="grow"><div class="s">Move the dentist to Thu 3:00 PM</div><div class="ctx">Changes 1 event · expires 9:44</div></div><span class="btn p">Allow</span></div>
+      <div class="sec"><div class="grow"><div class="s">Install a new agent: receipt sorter</div><div class="ctx">Adds files to .claude/agents · no expiry</div></div><span class="btn">Review</span></div>
+      <div class="acts"><span class="btn">Deny all</span></div>
+    </div></div>
+    <div class="state">Same message, 30 min later</div>
+    <div class="msg" data-juno="9:14 AM"><div class="body">
+      <div class="s"><b>1 thing still wants your OK</b></div>
+      <div class="sec"><div class="grow"><div class="s"><s>Invite Dana to the market</s></div><div class="ctx">Expired 9:44. Nothing sent.</div></div><span class="btn">Ask again</span></div>
+      <div class="sec"><div class="grow"><div class="s"><s>Move the dentist</s></div><div class="ctx">Expired 9:44. Nothing changed.</div></div><span class="btn">Ask again</span></div>
+      <div class="sec"><div class="grow"><div class="s">Install a new agent: receipt sorter</div><div class="ctx">Adds files to .claude/agents · no expiry</div></div><span class="btn">Review</span></div>
+    </div></div>
+  </div>
+</div>
+
+</div>
+<script src="chrome.js"></script>
+</body></html>

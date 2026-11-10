@@ -1,0 +1,40 @@
+# Paste into api.slack.com/apps -> Create New App -> From a manifest -> pick your free workspace.
+# Socket Mode means Slack connects out to nothing; the bridge connects out to Slack. No public URL.
+display_information:
+  name: Juno
+  description: "Runs Michael's calendar, inbox and reminders. Also his bedtime, allegedly. 🙃"
+  background_color: "#1f3b73"
+  long_description: |-
+    Hi, I'm Juno. I keep Michael's personal life running: his calendar, his inbox, his reminders, and the things he swears he'll remember this time.
+
+    I draft his replies so all he has to do is hit Send. I put prep and travel time on his calendar before he needs it, flag bills and birthdays before they sneak up on him, and tell him when it's time for bed. He rarely listens. I keep telling him anyway.
+
+    I never email anyone else or invite anyone without his tap, and I never touch his money. Warm, reliable, and only a little smug about it. 😏
+features:
+  bot_user:
+    display_name: Juno
+    always_online: false
+  app_home:
+    home_tab_enabled: false   # off 2026-11-08: on the phone it opened before the DM; "home" in the DM instead
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write          # post replies and pings
+      - im:history          # read Michael's DMs to the bot
+      - im:read
+      - im:write            # open the DM to post proactively
+      - users:read          # resolve the allowlisted user id
+      - files:read          # open photos Michael attaches to a DM
+      - files:write         # later: send report files or clips
+      - reactions:write     # later: acknowledge with an emoji while thinking
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.im
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

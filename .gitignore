@@ -1,0 +1,68 @@
+# Personal data and run history stay local
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+state/signals.jsonl
+state/processed.json
+state/pending-approvals.json
+state/costs.jsonl
+
+# Never commit secrets or personal overrides
+**/.env
+**/.env.*
+*.pem
+.claude/settings.local.json
+.claude/agent-memory-local/
+
+# Python
+__pycache__/
+.pytest_cache/
+gateway/slack.env
+state/slack-sessions.json
+state/last-run.json
+.venv/
+
+# Records agents build from email and accounts stay on this PC only (Juno still reads them)
+domains/**/*.csv
+domains/**/*.db
+domains/**/*.sqlite
+domains/**/*.jsonl
+
+# Juno's silent memory is personal data and stays on this PC
+observed/*
+!observed/README.md
+
+# Profiles of real people (Kin) stay on this PC
+people/*
+!people/README.md
+state/people-updates.md
+state/people-plans.md
+domains/admin/cleanup-candidates.md
+
+# Subagent drafts waiting for Michael's tap
+proposals/
+
+# Run state and personal notes stay on this PC
+state/*
+domains/admin/notes/*
+!domains/admin/notes/.gitkeep
+domains/business/notes/*
+
+# Sensitive detail (money figures, medical, private life) and the screenshots in docs/private/ stay on this PC; Juno and its agents still read it
+**/private/
+tools/*.env
+
+# Who Michael is stays on this PC (2026-11-08). The repo keeps blank templates (*.example.*) for a rebuild,
+# see docs/16-REBUILD-PLAYBOOK.md. Config (automation, proactivity) stays tracked.
+me/*
+!me/*.example.md
+!me/notify-allowlist.example.json
+!me/owner.example.json
+!me/automation.yaml
+!me/proactivity.yaml
+domains/*/CONTEXT.md
+domains/admin/email-rules.md
+learnings/*
+!learnings/_template.md
+domains/admin/inbox-sort.yaml

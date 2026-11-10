@@ -1,0 +1,6 @@
+slack_bolt>=1.21
+slack_sdk>=3.33
+apscheduler>=3.10,<4
+pyyaml>=6
+tzdata>=2024.1
+keyring>=25

@@ -1,0 +1,17 @@
+# Which action classes may run without a tap. Michael edits this file; the coordinator only reads it.
+# mode: ask | auto | auto_notify | never. "auto" requires clean_approvals >= promote_after AND Michael's explicit yes.
+# auto_notify: Juno does it, then tells Michael in the next message with a link to undo.
+promote_after: 10
+actions:
+  email.draft:            {mode: auto,  note: "Drafts never send; always allowed"}
+  email.send:             {mode: ask,   clean_approvals: 0, note: "Card: Send / Always send to them / Edit / Skip. Always is per exact recipients."}
+  email.send.self:        {mode: auto,  note: "Michael 2026-11-08: email only to his own address sends without a tap. tools/gmail.py send-self refuses if anyone else is on To, Cc or Bcc."}
+  calendar.hold:          {mode: auto_notify, note: "Michael 2026-11-07: add holds for things coming up (prep, travel time) and tell him. His calendar only, no attendees, so no invites go out. Since 2026-11-08 Juno adds them directly with tools/gcal.py hold (no attendees possible) and says so in plain words."}
+  calendar.event.create:  {mode: ask,   clean_approvals: 0, note: "Events with attendees send invites, so they stay a tap"}
+  calendar.event.update:  {mode: ask,   clean_approvals: 0}
+  booking.paid:           {mode: ask,   note: "Michael wants Juno to book things like events later. Anything that costs money is always a tap with the price shown."}
+  sheet.append_log:       {mode: auto,  note: "Michael 2026-11-08: Juno logs each workout to the coach's sheet on her own (empty cells and MN notes only; moves, clears and overwrites stay his call)"}
+  hevy.routine.create:    {mode: ask,   clean_approvals: 0}
+  memory.observe:         {mode: auto,  note: "Michael 2026-11-07: Juno keeps observed/ silently and reports changes in the brief and check-in"}
+  memory.write:           {mode: ask,   note: "me/, learnings/, people/, CONTEXT.md; never auto when unattended"}
+  money.any:              {mode: never, note: "No tool exists. Do not create one."}

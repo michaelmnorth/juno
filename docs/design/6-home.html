@@ -1,0 +1,116 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>6 Juno home</title><link rel="stylesheet" href="kit.css">
+<style>
+.tabs { display: flex; gap: 22px; padding: 0 16px; border-bottom: 1px solid #E8E8E8; font-size: 15px; font-weight: 700; color: #616061; }
+.tabs span { padding: 10px 0; }
+.tabs .on { color: #1D1C1D; border-bottom: 2px solid #1D1C1D; }
+.home { padding: 16px 16px 28px; display: flex; flex-direction: column; gap: 10px; }
+.app { background: #FBFAF6; font-family: Inter, sans-serif; color: #1F231C; }
+.app .status { color: #1F231C; }
+.big { font-weight: 800; font-size: 34px; line-height: 38px; letter-spacing: -.02em; padding: 4px 20px 4px; }
+.sub { font-size: 14px; line-height: 20px; color: #6B6557; padding: 0 20px 14px; }
+.search { margin: 0 16px 10px; height: 36px; border-radius: 10px; background: #EFECE4; display: flex; align-items: center; padding: 0 12px; font-size: 15px; color: #8A8375; }
+.bot { display: flex; gap: 12px; align-items: center; padding: 11px 16px; }
+.bot + .bot .txt { border-top: 1px solid #E6E1D6; }
+.bav { width: 46px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; color: #F1EEE6; flex-shrink: 0; background: #4F6B3A; }
+.bav.l { background: #DCE3D2; color: #3E5530; }
+.txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.nm { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 16px; }
+.nm span { font-weight: 400; font-size: 13px; color: #8A8375; }
+.ln { font-size: 14px; line-height: 19px; color: #5C574C; display: flex; justify-content: space-between; gap: 8px; }
+.ln b { width: 9px; height: 9px; border-radius: 5px; background: #4F6B3A; flex-shrink: 0; margin-top: 5px; }
+.mood { font-size: 12px; color: #6E7F5E; }
+.sec2 { padding: 18px 20px 6px; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #8A8375; }
+.card { margin: 0 16px; background: #fff; border-radius: 14px; border: 1px solid #E6E1D6; padding: 4px 14px; }
+.crow { display: flex; gap: 10px; align-items: center; padding: 11px 0; }
+.crow + .crow { border-top: 1px solid #EEEAE1; }
+.crow .t { flex: 1; min-width: 0; font-size: 15px; line-height: 20px; }
+.crow .t small { display: block; font-size: 13px; color: #8A8375; }
+.pill { height: 32px; padding: 0 14px; border-radius: 16px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; background: #EFECE4; color: #1F231C; flex-shrink: 0; }
+.pill.p { background: #4F6B3A; color: #fff; }
+.nums { display: flex; margin: 0 16px; gap: 10px; }
+.num { flex: 1; background: #fff; border: 1px solid #E6E1D6; border-radius: 14px; padding: 12px; }
+.num b { display: block; font-weight: 800; font-size: 24px; letter-spacing: -.02em; }
+.num span { font-size: 12px; color: #8A8375; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px; }
+.chip { background: #fff; border: 1px solid #E6E1D6; border-radius: 18px; padding: 7px 12px; font-size: 14px; }
+.tabbar { display: flex; justify-content: space-around; padding: 10px 0 24px; border-top: 1px solid #E6E1D6; font-size: 11px; font-weight: 600; color: #8A8375; margin-top: 18px; }
+.tabbar .on { color: #4F6B3A; }
+</style></head>
+<body>
+<div class="lbl">6 Juno home: what is waiting, what Juno learned, people coming up, costs</div>
+<div class="row">
+
+<!-- A -->
+<div class="phone">
+  <div class="note"><div class="top"><div class="letter">A</div><div class="title">Slack Home tab</div></div>
+    <div class="idea">The Home tab on Juno's Slack app. Same blocks as the cards, so it can be built now. Refreshes when you open it.</div>
+    <div class="kit">Buildable now: App Home (views.publish), Block Kit</div></div>
+  <div class="chrome"></div>
+  <div class="tabs"><span class="on">Home</span><span>Messages</span><span>About</span></div>
+  <div class="home">
+    <div class="hdr">Sunday, Nov 8</div>
+    <div class="ctx">Updated 6:12 PM · all running · $1.90 this week</div>
+    <div class="div"></div>
+    <div class="s"><b>Waiting on you</b></div>
+    <div class="sec"><div class="grow"><div class="s">Reply to Dana is ready</div><div class="ctx">Friend · drafted 9:14 AM</div></div><span class="btn p">Review</span></div>
+    <div class="sec"><div class="grow"><div class="s">2 changes from this week</div><div class="ctx">Quill, Juno</div></div><span class="btn">Review</span></div>
+    <div class="div"></div>
+    <div class="s"><b>Coming up</b></div>
+    <div class="sec"><div class="grow"><div class="s">Theo's birthday in 5 days</div><div class="ctx">No plan yet</div></div><span class="btn">Ideas</span></div>
+    <div class="sec"><div class="grow"><div class="s">Call with the accountant, Mon 9:30</div><div class="ctx">Forms in the tax folder</div></div><span class="btn">Prep</span></div>
+    <div class="div"></div>
+    <div class="s"><b>What I learned this week</b></div>
+    <div class="sec"><div class="grow"><div class="s">You move gym days when you have dinner plans</div><div class="ctx">Seen 3 times</div></div><span class="btn">Undo</span></div>
+    <div class="sec"><div class="grow"><div class="s">You answer leave-by pings within minutes</div><div class="ctx">Seen 5 times</div></div><span class="btn">Undo</span></div>
+    <div class="div"></div>
+    <div class="fields"><div><b>Runs</b><br>28, 0 failed</div><div><b>Pings</b><br>19, answered 14</div></div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="phone app">
+  <div class="note app"><div class="top"><div class="letter">B</div><div class="title">One bot per row</div></div>
+    <div class="idea">The calm of a messages app. Every agent is a conversation with its last line and a quiet mood. Tap one to talk to it. A dot means it wants you.</div>
+    <div class="kit">Needs a Juno app (idea 18)</div></div>
+  <div class="status"><span>9:41</span><span style="font-size:13px;letter-spacing:.1em">●●● ▲ ▬</span></div>
+  <div class="big">Juno</div>
+  <div class="sub">2 want you. The rest are quiet.</div>
+  <div class="search">Search people, notes, mail</div>
+  <div class="bot"><div class="bav">J</div><div class="txt"><div class="nm">Juno<span>6:12 PM</span></div><div class="ln">2 things wait for you. Week reviewed.<b></b></div></div></div>
+  <div class="bot"><div class="bav">Q</div><div class="txt"><div class="nm">Quill<span>9:14 AM</span></div><div class="ln">Reply to Dana is ready.<b></b></div></div></div>
+  <div class="bot"><div class="bav l">K</div><div class="txt"><div class="nm">Kin<span>6:01 PM</span></div><div class="ln">Theo's birthday in 5 days. I have ideas.</div><div class="mood">thoughtful</div></div></div>
+  <div class="bot"><div class="bav l">T</div><div class="txt"><div class="nm">Tempo<span>Yesterday</span></div><div class="ln">Monday starts at 9:30.</div><div class="mood">on time</div></div></div>
+  <div class="bot"><div class="bav l">R</div><div class="txt"><div class="nm">Rep<span>Yesterday</span></div><div class="ln">Upper body logged. Week 3 of 6.</div><div class="mood">pleased</div></div></div>
+  <div class="bot"><div class="bav l">L</div><div class="txt"><div class="nm">Ledger<span>Fri</span></div><div class="ln">Phone bill paid. Nothing due this week.</div><div class="mood">calm</div></div></div>
+  <div class="bot"><div class="bav l">W</div><div class="txt"><div class="nm">Rewind<span>Fri</span></div><div class="ln">6 videos this week, 1 idea for me.</div><div class="mood">curious</div></div></div>
+  <div class="tabbar"><span class="on">Chats</span><span>People</span><span>Learned</span><span>Costs</span></div>
+</div>
+
+<!-- C -->
+<div class="phone app">
+  <div class="note app"><div class="top"><div class="letter">C</div><div class="title">Today page</div></div>
+    <div class="idea">One page to open in the morning: what waits, with buttons; what Juno learned, with Undo; people as chips; the week in three numbers.</div>
+    <div class="kit">Needs a Juno app (idea 18)</div></div>
+  <div class="status"><span>9:41</span><span style="font-size:13px;letter-spacing:.1em">●●● ▲ ▬</span></div>
+  <div class="sub" style="padding-top:6px;padding-bottom:0">Sunday, Nov 8</div>
+  <div class="big" style="padding-bottom:16px">Quiet evening.<br><span style="color:#4F6B3A">2 for you.</span></div>
+  <div class="card">
+    <div class="crow"><div class="t">Reply to Dana<small>Friend · drafted 9:14 AM</small></div><span class="pill p">Review</span></div>
+    <div class="crow"><div class="t">2 changes from this week<small>Quill, Juno</small></div><span class="pill">Review</span></div>
+  </div>
+  <div class="sec2">Learned</div>
+  <div class="card">
+    <div class="crow"><div class="t">You move gym days for dinner plans<small>Seen 3 times</small></div><span class="pill">Undo</span></div>
+    <div class="crow"><div class="t">Leave-by pings get answered fast<small>Seen 5 times</small></div><span class="pill">Undo</span></div>
+  </div>
+  <div class="sec2">People</div>
+  <div class="chips"><span class="chip">Theo, birthday in 5 days</span><span class="chip">Mom turns 60, Dec 2</span><span class="chip">Sam, quiet since Aug</span></div>
+  <div class="sec2">This week</div>
+  <div class="nums"><div class="num"><b>28</b><span>runs, 0 failed</span></div><div class="num"><b>$1.90</b><span>spent</span></div><div class="num"><b>14/19</b><span>pings answered</span></div></div>
+  <div class="tabbar"><span class="on">Today</span><span>Chats</span><span>People</span><span>Settings</span></div>
+</div>
+
+</div>
+<script src="chrome.js"></script>
+</body></html>

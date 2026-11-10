@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4",
+    "COORDINATOR_HOME": "${CLAUDE_PROJECT_DIR}"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python tools/*)",
+      "PowerShell(python tools/*)",
+      "Bash(python -m pytest*)",
+      "PowerShell(python -m pytest*)",
+      "WebSearch",
+      "WebFetch",
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Gmail__get_message",
+      "mcp__claude_ai_Gmail__list_labels",
+      "mcp__claude_ai_Gmail__list_drafts",
+      "mcp__claude_ai_Gmail__get_draft",
+      "mcp__claude_ai_Gmail__create_draft",
+      "mcp__claude_ai_Gmail__update_draft",
+      "mcp__claude_ai_Google_Calendar__list_calendars",
+      "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Google_Calendar__get_event",
+      "mcp__claude_ai_Google_Calendar__search_events",
+      "mcp__claude_ai_Google_Calendar__suggest_time",
+      "mcp__claude_ai_Google_Sheets__get_spreadsheet",
+      "mcp__claude_ai_Google_Sheets__get_values",
+      "mcp__claude_ai_Google_Docs__read_doc",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude_ai_Google_Drive__list_recent_files"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Bash(op read*)",
+      "Bash(op item*)",
+      "Bash(printenv*)",
+      "Bash(env)",
+      "PowerShell(op read*)",
+      "PowerShell(op item*)",
+      "PowerShell(Get-ChildItem Env:*)",
+      "PowerShell(gci env:*)",
+      "Read(~/Claude-Work/**)",
+      "Edit(~/Claude-Work/**)",
+      "Write(~/Claude-Work/**)",
+      "Bash(claude plugin install*)",
+      "Bash(claude mcp add*)",
+      "PowerShell(claude plugin install*)",
+      "PowerShell(claude mcp add*)",
+      "mcp__claude_ai_Gmail__forward",
+      "mcp__claude_ai_Gmail__reply",
+      "mcp__claude_ai_Gmail__trash_message",
+      "mcp__claude_ai_Gmail__trash_thread",
+      "mcp__claude_ai_Gmail__untrash_message",
+      "mcp__claude_ai_Gmail__untrash_thread",
+      "mcp__claude_ai_Gmail__delete_draft",
+      "mcp__claude_ai_Gmail__delete_label",
+      "mcp__claude_ai_Gmail__update_label",
+      "mcp__claude_ai_Gmail__create_label",
+      "mcp__claude_ai_Gmail__mark_message_spam",
+      "mcp__claude_ai_Gmail__mark_thread_spam",
+      "mcp__claude_ai_Gmail__unmark_message_spam",
+      "mcp__claude_ai_Gmail__unmark_thread_spam",
+      "mcp__claude_ai_Gmail__label_message",
+      "mcp__claude_ai_Gmail__label_thread",
+      "mcp__claude_ai_Gmail__unlabel_message",
+      "mcp__claude_ai_Gmail__unlabel_thread",
+      "mcp__claude_ai_Gmail__update_message_labels",
+      "mcp__claude_ai_Gmail__apply_sensitive_message_label",
+      "mcp__claude_ai_Gmail__apply_sensitive_thread_label",
+      "mcp__claude_ai_Google_Calendar__delete_event",
+      "mcp__claude_ai_Google_Calendar__respond_to_event",
+      "mcp__claude_ai_Slack__slack_send_message",
+      "mcp__claude_ai_Slack__slack_send_message_draft",
+      "mcp__claude_ai_Slack__slack_schedule_message",
+      "mcp__claude_ai_Slack__slack_create_conversation",
+      "mcp__claude_ai_Slack__slack_create_canvas",
+      "mcp__claude_ai_Slack__slack_update_canvas",
+      "mcp__claude_ai_Slack__slack_create_list",
+      "mcp__claude_ai_Slack__slack_update_list",
+      "mcp__claude_ai_Slack__slack_add_list_record",
+      "mcp__claude_ai_Slack__slack_update_list_record",
+      "mcp__claude_ai_Slack__slack_add_reaction",
+      "mcp__claude_ai_Slack__slack_get_file_upload_url",
+      "mcp__claude_ai_Slack__slack_complete_file_upload",
+      "mcp__claude_ai_Google_Sheets__append_values",
+      "mcp__claude_ai_Google_Sheets__batch_clear_values",
+      "mcp__claude_ai_Google_Sheets__copy_sheet_to_another_spreadsheet",
+      "mcp__claude_ai_Google_Sheets__insert_dimension",
+      "mcp__claude_ai_Google_Sheets__update_formulas",
+      "mcp__claude_ai_Google_Sheets__update_spreadsheet",
+      "mcp__claude_ai_Google_Sheets__update_values",
+      "mcp__claude_ai_Google_Docs__update_doc",
+      "mcp__claude_ai_Google_Drive__add_comment_reply",
+      "mcp__claude_ai_Google_Drive__copy_file",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "mcp__claude_ai_Google_Drive__request_access",
+      "mcp__claude_ai_Google_Drive__resolve_comment_thread",
+      "mcp__claude_ai_Google_Drive__share_file",
+      "mcp__claude_ai_Google_Drive__trash_file",
+      "mcp__claude_ai_Google_Drive__update_file",
+      "mcp__claude_ai_Claude_Docs__batch",
+      "mcp__claude_ai_Claude_Docs__create",
+      "mcp__claude_ai_Claude_Docs__delete",
+      "mcp__claude_ai_Claude_Docs__update",
+      "mcp__claude_ai_Spotify__generate_playlist",
+      "mcp__claude_ai_Spotify__remove_from_library",
+      "mcp__claude_ai_Spotify__save_to_library"
+    ],
+    "ask": [
+      "Edit(CLAUDE.md)",
+      "Write(CLAUDE.md)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate_memory_writes.py"
+            ],
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate_web.py"
+            ],
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__(send|reply|post|create_message|chat_postMessage).*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify_michael_only.py"
+            ],
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*Gmail__(send_message|create_draft|update_draft)|mcp__.*Calendar__(create_event|update_event)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate_outward.py"
+            ],
+            "timeout": 15,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
