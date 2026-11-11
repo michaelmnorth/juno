@@ -4,7 +4,7 @@ The one page to read first. Any Juno session updates it when something lands. Th
 (`08-ROADMAP.md` for phases and gates, `reports/P0.md` for the latest phase report, `BACKLOG.md` for parked ideas).
 The v1 docs (`01` to `16`) are history.
 
-Last updated 2026-11-10.
+Last updated 2026-11-11.
 
 ## Where things live
 
@@ -51,7 +51,8 @@ The freeze (`docs/v2/FREEZE.md`) holds new agents, skills and loops until P1 exi
 
 ## Waiting on Michael
 
-1. Fill the backup passphrase in 1Password; then the first real backup and a restore drill run.
+1. Backups: the first real backup and a restore drill ran 2026-11-11 (581 files, drill clean). The nightly 3:30 job
+   has not fired yet, likely because the PC sleeps; allow wake timers or move the time.
 2. Create the external heartbeat monitor and store its URL in 1Password.
 3. Revoke the old read-only service account in 1Password, if still there.
 4. The API key for P1: an Anthropic key in 1Password as `Anthropic-Juno` (field `api_key`), with a $40 monthly
