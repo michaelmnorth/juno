@@ -461,7 +461,7 @@ def acknowledge(client, channel: str, ts: str, latency: float | None = None) -> 
                 _working_for[channel] = client.chat_postMessage(channel=channel, text=working_text())["ts"]
             except Exception as exc:
                 LOG.info("working line failed: %s", exc)
-    LOG.info("DM in: Slack took %s, eyes %.0f ms, working line %s",
+    LOG.info("DM in: delivery took %s, eyes %.0f ms, working line %s",
              "?" if latency is None else f"{latency:.1f} s", seen_ms, "already up" if posted else "posted")
 
 
