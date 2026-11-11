@@ -19,7 +19,7 @@ P2 and P3 can overlap. Nothing else should.
 |---|---|---|---|
 | **P0 Stabilise and measure** | Audit of v1 against this kit; token ledger; quick safety fixes; backup; freeze | Top three token sinks named with numbers; backup restored; kill-switch and approval-binding tests pass; CI green | `P0` |
 | **P1 Context engine** | Event queue, router, assembler, direct model calls with typed tools; DMs on the new path behind a flag | 7 days of real DMs at p50 ≤ $0.03 and p95 ≤ $0.20; ≥ 90% of follow-up dialogues pass; no general-purpose tool reachable | `P1` |
-| **Quick packs** | Launch tracker, weekly goals pulse, wind-down nudge, dated reminders, all L0 or one L1 call | Each appears in the brief or check-in and costs under a cent a day | none; small tasks |
+| **Quick packs** | Weekly goals pulse, wind-down nudge, dated reminders, all L0 or one L1 call | Each appears in the brief or check-in and costs under a cent a day | none; small tasks |
 | **P3 Isolation and always-on** | Container on a dedicated host; pollers; scheduled jobs on the new lanes; run classes and taint enforced; red-team suite; runbook | 14 days unattended with the old PC off; brief on time ≥ 13 of 14; red-team 100%; restore drill done | `P3` |
 | **P2 Memory** | Store, importer, budgeted retrieval, nightly consolidation, forget | Recall at budget ≥ 90% on ≥ 40 probes; forget and poisoning tests pass; 7 clean nights | `P2` |
 | **P4 Learning loop** | Signals, golden sets, eval gate, rules, examples, lesson lifecycle, scorecard, graduation | 3 scorecards with no manual step; one task graduated or a finding why not; no active item without an eval | `P4` |
@@ -29,14 +29,13 @@ P2 and P3 can overlap. Nothing else should.
 
 ## Suggested calendar
 
-A suggestion, built around the cohort launch on Dec 15. The owner sets the dates. **Changed 2026-11-10:** P1 moved after the launch (decision O6). It was placed before the launch because DMs looked like $500 a month with no conversation; the audit showed neither is true.
+A suggestion; the owner sets the dates. **Changed again 2026-11-10:** there is no Dec 15 launch (owner), so nothing waits on one. P1 starts as soon as P0 closes (decision O6).
 
 | When | What |
 |---|---|
-| Nov 10–17 | P0, including the items added after the audit. Backups first. Also set the two dated reminders the map lists as not yet set |
-| Nov 18–Dec 5 | Quick packs on v1, launch tracker first. P1 may be built on its branch, with no real DMs moved. Buy or provision the host for P3 |
-| Dec 6–15 | **Freeze.** Fixes only. Launch |
-| After Dec 15 | P1 and its 7-day run on real DMs, then P3 (its 14-day gate runs while P2 is built), then P4, P5 |
+| Nov 10–17 | P0, including the items added after the audit. Backups first. Dated reminders set (2026-11-10) |
+| From Nov 18 | P1 on its branch, then its 7-day run on real DMs. Buy or provision the host for P3 meanwhile |
+| After P1 exits | Quick packs on v1 (the freeze holds them until then), then P3 (its 14-day gate runs while P2 is built), then P4, P5 |
 | When the gate clears | P7. P6 any time after P3 |
 
 Quick packs were written as L0 code or one L1 call. On v1, build them the way the coach-sheet job already runs: code first, then a single lean call with no tools.
@@ -58,7 +57,7 @@ Quick packs were written as L0 code or one L1 call. On v1, build them the way th
 |---|---|---|
 | Weekly scorecard | Keep | P4. A ledger-only version can ship in P0 |
 | Your edits become tests | Keep | Capture pairs from P0; evals in P4 |
-| Launch tracker for Dec 15 | Keep, soon | Quick pack on v1, before the freeze: a checklist file, counted in code, one line in the brief |
+| Launch tracker | Dropped 2026-11-10 | There is no launch date to track (owner) |
 | Weekly goals pulse | Keep | Quick pack: stored goals, checked in code against calendar and workouts |
 | Wind-down nudge | Keep | L0, fixed text, before quiet hours |
 | Event scan | Keep, reshape | A `research` run that receives the stated criteria and free evenings only; results return through `reader` |
@@ -80,7 +79,6 @@ Quick packs were written as L0 code or one L1 call. On v1, build them the way th
 |---|---|---|
 | The audit finds v1 differs from the map in ways that change P1 | Many "differs" rows in `AUDIT.md` | Update the kit's specs with the owner before P1; do not adapt silently |
 | Answer quality drops with small assembled context | Dialogue set below 90%; more corrections | Raise one block's budget with ledger evidence; add a retrieval slot; do not fall back to "load everything" |
-| The rebuild crowds the launch | P0 still open on Nov 21 | Finish backups, the kill switch and the web-tool restriction; park the rest until after Dec 15 |
 | v2 conversation is worse than v1's resumed session | v2 scores below v1 on the dialogue set | Do not move real DMs. Widen the thread block with ledger evidence, or keep v1's path for that intent |
 | A cheaper model disappoints on voice | Compose edit distance rises | Stay on the higher rung for that task; the ladder moves both ways |
 | The owner tires of taps | Approvals expiring unanswered | Bundle proposals; consider earned autonomy for reversible shapes only |

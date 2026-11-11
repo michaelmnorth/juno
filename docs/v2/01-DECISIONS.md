@@ -96,7 +96,7 @@ Each has a default the plan assumes until the owner says otherwise.
 | O3 | The "Juno as a person" track (own phone number, WhatsApp, own Gmail) | Pause; revisit in Phase 6 with the platform rules in hand |
 | O4 | Work twin path | A (skills-only inside the employer's Claude plan) after the gate |
 | O5 | Overnight coding agent | Not before Phase 3; cloud sandbox on the code repo only |
-| O6 | Rebuild timing against the Dec 15 launch | **Changed 2026-11-10:** Phase 0 before; freeze launch week; Phase 1 and the rest after. Phase 1 may be built on its branch earlier, but real DMs do not move before the launch |
+| O6 | Rebuild timing | **Changed again 2026-11-10:** there is no Dec 15 launch (owner). Phase 1 starts as soon as Phase 0 closes, and real DMs move once its tests pass |
 | O7 | What the cohort builds | v1's shape as the first agent; v2 as the "living with it" module |
 | O8 | Conversational default model | Sonnet 5.5 at low effort; demote per intent on evals. Applied to v1 in Phase 0 |
 | O9 | Where the build rules live (added 2026-11-10) | `docs/v2/BUILD-RULES.md`, named in each build session's opening prompt. Not merged into v1's `CLAUDE.md`, which is the runtime prompt |

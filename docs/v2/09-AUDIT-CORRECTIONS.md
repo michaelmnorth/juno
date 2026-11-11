@@ -34,7 +34,7 @@ Dated 2026-11-10. The kit was written on 2026-11-09 from the System Map, without
 
 ## Changed owner decisions
 
-- **O6, new default: P0 before the launch, P1 after it.** P1 was scheduled before Dec 15 because DMs looked like $500 a month with no conversation. Neither is true. P1 is still the next structural step, and it can be built on its branch at any time, but moving real DMs before the launch now carries more risk than it removes.
+- **O6, new default: P0 before the launch, P1 after it.** P1 was scheduled before Dec 15 because DMs looked like $500 a month with no conversation. Neither is true. P1 is still the next structural step, and it can be built on its branch at any time, but moving real DMs before the launch now carries more risk than it removes. *Superseded the same day: there is no Dec 15 launch (owner), so P1 follows P0 directly (`01-DECISIONS.md` O6).*
 - **O9, new: where the build rules live.** v1's `CLAUDE.md` is the runtime prompt, so merging `templates/CLAUDE.build.md` into it would add about 600 tokens to every Juno run. Default: keep the rules at `docs/v2/BUILD-RULES.md` and name that file in each build session's opening prompt. In v2 the runtime does not read `CLAUDE.md` at all, and the question goes away.
 
 ## Added to Phase 0

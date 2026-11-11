@@ -10,7 +10,7 @@ Owner DMs run through a new path: event queue → router → context assembler �
 
 Corrected 2026-11-10 (`09-AUDIT-CORRECTIONS.md`). The audit found that v1's DMs resume one Claude Code session per Slack channel, so follow-ups work today, at an audited mean of $0.37 and median of $0.20 per DM on Opus. Each turn carries a fixed prefix of about 41K tokens and a replayed transcript (median 117K), in a run that can read files, fetch the web and hold mail text.
 
-This phase removes the general-purpose harness from the path the owner uses most, bounds what each turn carries, and makes budgets enforceable. The cost gain is real and smaller than first written. Because v1's conversation works, this phase must not make it worse. By decision O6, real DMs do not move to v2 before the Dec 15 launch.
+This phase removes the general-purpose harness from the path the owner uses most, bounds what each turn carries, and makes budgets enforceable. The cost gain is real and smaller than first written. Because v1's conversation works, this phase must not make it worse. By decision O6 (revised 2026-11-10: there is no Dec 15 launch), real DMs move to v2 once this phase's dialogue set passes.
 
 ## Deliverables
 
