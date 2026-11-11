@@ -24,7 +24,7 @@ Last updated 2026-11-11.
 
 | Area | State |
 |---|---|
-| Slack | DMs (v2 first, v1 for the rest), approval cards, timers, reactions, photos. Home tab off |
+| Chat | Discord since 2026-11-11 (DV15; `me/channel.yaml`, one line back to Slack). DMs (v2 first, v1 for the rest), approval cards, timers, reactions, photos |
 | Inbox | Sweep every 2 hours; code sorts most mail, Sorter the rest; reply drafts unasked; never sends without a tap |
 | Calendar | Reads, free slots in code, holds with no tap; invites need a tap |
 | Briefs | Morning brief and evening check-in; dated reminders and one-shot pings |
@@ -59,6 +59,9 @@ The freeze (`docs/v2/FREEZE.md`) holds new agents, skills and loops until P1 exi
 2. Create the external heartbeat monitor and store its URL in 1Password; also picked up within 15 minutes.
 3. Revoke the old read-only service account in 1Password, if still there.
 4. P3 host: home machine or cloud VM (default home).
+5. The $40 monthly spend alert in the Claude Console (sign in there, then Juno can set it).
+
+P1 dialogue set: 20 of 22 (91%) on 2026-11-11, gate met; the 7-day cost check runs from here.
 
 Backups: first real backup and restore drill clean on 2026-11-11 (581 files). The nightly 3:30 run now catches up on
 wake when the PC slept through it.
