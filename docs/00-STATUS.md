@@ -40,7 +40,7 @@ There is no Dec 15 launch, so nothing waits on one (owner, 2026-11-10).
 | When | Phase | Done when |
 |---|---|---|
 | By Nov 17 | **P0 close-out** | Ledger rerun at 50 DMs or 7 days; real backup restored; heartbeat monitor live |
-| From Nov 18 | **P1 Context engine**: DMs on a lean, typed path | 7 days of real DMs at p50 ≤ $0.03, p95 ≤ $0.20; dialogue set ≥ 90% |
+| Now | **P1 Context engine**: DMs on a lean, typed path. Built 2026-11-10 on branch `v2-p1` (`docs/v2/reports/P1.md`); off until a chat says "use v2"; needs the API key | 7 days of real DMs at p50 ≤ $0.03, p95 ≤ $0.20; dialogue set ≥ 90% |
 | After P1 | **Quick packs**: weekly goals pulse, wind-down nudge | Each in the brief or check-in, under a cent a day |
 | Then | **P3 Always on** (dedicated host), with **P2 Memory** alongside | 14 days unattended with the PC off; recall ≥ 90% |
 | Then | **P4 Learning loop**, **P5 Profiles and onboarding** | Scorecards with no manual step; empty folder to first brief in 60 minutes |
@@ -54,8 +54,10 @@ The freeze (`docs/v2/FREEZE.md`) holds new agents, skills and loops until P1 exi
 1. Fill the backup passphrase in 1Password; then the first real backup and a restore drill run.
 2. Create the external heartbeat monitor and store its URL in 1Password.
 3. Revoke the old read-only service account in 1Password, if still there.
-4. Open decisions: an API key for the runtime with a $40 monthly alert (needed for P1); P3 host, home machine or
-   cloud VM (default home).
+4. The API key for P1: an Anthropic key in 1Password as `Anthropic-Juno` (field `api_key`), with a $40 monthly
+   alert in the Console. Then the dialogue run (about $1) and "use v2" in the DM.
+5. P1: how to compare against v1 on the dialogue set (`docs/v2/DEVIATIONS.md` DV12).
+6. P3 host: home machine or cloud VM (default home).
 
 ## Parked (`docs/v2/BACKLOG.md`)
 

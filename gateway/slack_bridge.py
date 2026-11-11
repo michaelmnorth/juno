@@ -116,6 +116,8 @@ HANDOFF_PROMPT = ("Session handoff: this conversation is being closed after 12 h
                   "with only these three lines, under 120 words in all, facts from this conversation only, 'none' "
                   "where empty:\nOpen threads: ...\nPromised Michael: ...\nDecided: ...")
 HANDOFF_MAX = 1500
+V2_ON = ("use v2", "/v2", "v2 on", "new engine")  # the per-chat engine flag (P1 brief, deliverable 8)
+V2_OFF = ("use v1", "/v1", "v2 off", "old engine")
 SLACK_MAX = 3900
 
 # --- configuration --------------------------------------------------------------------------------
@@ -471,7 +473,8 @@ def answer_batch(client, bridge: "Bridge", channel: str, items: list[dict]) -> N
             LOG.info("working line failed: %s", exc)
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
-        reply = bridge.handle_dm(channel, items[-1]["user"], "\n\n".join(i["text"] for i in items))
+        reply = bridge.handle_dm(channel, items[-1]["user"], "\n\n".join(i["text"] for i in items),
+                                 dedupe=f"{channel}:{last}")
     finally:
         _delete(client, channel, working)
         for item in items:
@@ -513,7 +516,7 @@ def _gmail_send_approved(draft_id: str, to: str, draft_text: str) -> dict:
 
 class Bridge:
     def __init__(self, *, root: Path = ROOT, sessions: SessionMap | None = None, approvals: Approvals | None = None,
-                 runner=claude_runner.run, dry_run: bool = False, send_email=None):
+                 runner=claude_runner.run, dry_run: bool = False, send_email=None, v2_engine=None):
         self.root = root
         self.sessions = sessions or SessionMap()
         self.approvals = approvals or Approvals()
@@ -521,15 +524,26 @@ class Bridge:
         self.dry_run = dry_run
         self.allowlist = load_allowlist(root)
         self.send_email = send_email  # None: the real Gmail sender, looked up at call time
+        self._v2 = v2_engine  # built on first use (docs/v2/briefs/P1-context-engine.md)
 
     def _run(self, *args, **kwargs):
         with RUN_LOCK:
             return self.runner(*args, **kwargs)
 
+    @property
+    def v2(self):
+        if self._v2 is None:
+            sys.path.insert(0, str(self.root))
+            from v2.backend import RealBackend
+            from v2.converse import Engine
+            self._v2 = Engine(self.root, RealBackend(self.root,
+                                                     quiet_hours=lambda: in_quiet_hours(load_proactivity(self.root))))
+        return self._v2
+
     def allowed(self, user_id: str | None) -> bool:
         return bool(user_id) and user_id in self.allowlist
 
-    def handle_dm(self, channel: str, user_id: str, text: str) -> str:
+    def handle_dm(self, channel: str, user_id: str, text: str, dedupe: str = "") -> str:
         """Michael typed in the DM. Returns the reply text to post."""
         if not self.allowed(user_id):
             LOG.warning("ignored DM from non-allowlisted user %s", user_id)
@@ -537,7 +551,16 @@ class Bridge:
         text = (text or "").strip()
         if text.lower() in ("/new", "new session", "reset"):
             self.sessions.reset(channel)
+            if self.v2.store.engine(channel) == "v2":
+                self.v2.reset(channel)
             return "Fresh session. What's next?"
+        if text.lower() in V2_ON:
+            self.v2.store.set_engine(channel, "v2")
+            return ("New engine on for this chat. 🧪 Calendar, mail, reminders, notes and people work here; "
+                    "say \"use v1\" any time to switch back.")
+        if text.lower() in V2_OFF:
+            self.v2.store.set_engine(channel, "v1")
+            return "Back on the old engine. 🫡"
         if text.lower() in ("status", "/status"):
             return self.status_text()
         if text.lower() in brakes.PAUSE_WORDS:
@@ -549,6 +572,14 @@ class Bridge:
         stop = brakes.blocked(self.root)
         if stop == "paused":
             return "Still paused. Say resume when you want me back. 😴"
+        if self.v2.store.engine(channel) == "v2":
+            ping_answered(self.root)
+            with RUN_LOCK:  # one state-writing run at a time, as on v1
+                reply = self.v2.handle(channel, text, dedupe or f"dm-{time.time_ns()}")
+            if reply is None:
+                return ""  # a Slack retry of a message already answered
+            heartbeat("dm-v2", not reply.error, reply.text[:120])
+            return self._with_spend_notice(reply.text)
         resume = self.sessions.get(channel)
         handoff = self.handoff(channel) if resume is None else ""
         prompt = ((f"[Where the last session left off]\n{handoff}\n\n" if handoff else "") +

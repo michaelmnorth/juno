@@ -73,3 +73,26 @@ never pauses anything now. The first time a day's runs pass $5.00, and again at 
 with the dollars and tokens so far (`gateway/brakes.py` `NOTICE_AT_USD`). "pause" in the DM and the `state/PAUSED`
 flag still stop everything, and the per-run turn and dollar caps (DV8) still end a runaway run. A work instance should
 decide its own budget rule; this one is the owner's personal choice.
+
+## DV10 · Per-block token counts are estimates (affects 03 "The assembler", Every block is measured)
+
+The spec asks for per-block counts from the token counting endpoint or response usage, never a local guess.
+Response usage gives only totals, and counting each block through the endpoint would add an API round trip per
+block per turn. P1's assembler enforces block budgets on a characters ÷ 4 estimate before the call, writes those
+estimates to the ledger's `tok_*` columns, and writes the real totals (input, cache writes, cache reads, output)
+from response usage. When the gate run starts, calibrate the estimate once against `count_tokens` on a sample of
+real requests and record the ratio here.
+
+## DV11 · Tool sets per playbook, not per run class (affects 03 block 1)
+
+Block 1 is "tool definitions for the run class". Every converse tool together is about 2,000 tokens against a
+1,500 budget, so the router's playbook picks the set (calendar, mail, people, notes, general; `v2/tools.py`
+`PLAYBOOK_TOOLS`), as the router section already implies ("intent and playbook choose blocks 1 and 4"). A test keeps
+every set inside the budget. The cache is per set; a thread that moves between playbooks pays one prefix write.
+
+## DV12 · The v1 baseline on the dialogue set is not automatic (affects the P1 brief, Done when 3)
+
+The brief asks for the dialogue set to run on v1's resumed-session path first. The set runs against a synthetic
+world through v2's typed tools (`evals/world.py`); v1 calls the real Gmail and Calendar scripts and has no seam for
+a fake backend. Options: score v1 by hand on the same 22 scripts in a scratch Slack DM (about 50 messages), or
+accept v2's absolute score with the 90% gate. Owner to choose before real DMs move.

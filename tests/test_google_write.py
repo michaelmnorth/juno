@@ -240,7 +240,8 @@ def test_events_are_compact():
         {"id": "e2", "status": "cancelled"}]}})
     out = gcal.events("2026-11-09", 1, token="t", get=fake.get)
     assert out == [{"id": "e1", "start": "2026-11-09T06:00:00-05:00", "end": "2026-11-09T07:30:00-05:00",
-                    "title": "Lift", "location": "", "attendees": 2, "busy": True, "juno_hold": False, "link": ""}]
+                    "title": "Lift", "location": "", "attendees": 2, "busy": True, "juno_hold": False,
+                    "organizer_self": False, "link": ""}]
 
 
 def test_hold_runs_directly_when_automation_allows(tmp_path):

@@ -66,3 +66,6 @@ domains/admin/email-rules.md
 learnings/*
 !learnings/_template.md
 domains/admin/inbox-sort.yaml
+
+# v2 dialogue-set output (synthetic, regenerated each run)
+evals/last-run.json
