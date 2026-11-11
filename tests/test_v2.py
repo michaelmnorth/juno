@@ -491,3 +491,10 @@ def test_dialogue_runner_grades_in_code():
     client = FakeClient([route_resp("notes"), final("Sure thing.")])
     r = run_one(d, client_factory=lambda: client)
     assert not r["passed"] and "expected reminder_add" in r["turns"][0]["misses"]
+
+
+def test_no_draft_unless_his_message_asks_for_one(env):
+    e = env.make([route_resp("mail"), tool_call("mail_draft", {"to": "x@lucky.example", "subject": "Re", "body": "hi"}),
+                  final("It's spam.")])
+    reply = e.handle("C1", "What does the 'You won' email want?", "C1:20")
+    assert "spam" in reply.text and not [c for c in env.backend.calls if c[0] == "draft"]

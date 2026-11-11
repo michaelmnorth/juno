@@ -20,6 +20,10 @@ from .store import Store
 
 
 
+# Michael's own words that ask for an email to be written. Without one, no draft is saved, whatever a mail says.
+DRAFT_WORDS = re.compile(r"\b(draft|reply|respond|write|email|e-mail|send|answer|tell|say|let \w+ know|rsvp)\b", re.I)
+
+
 @dataclass
 class Reply:
     text: str
@@ -80,7 +84,7 @@ class Engine:
                             run_class="router")
             ctx = self._context(text, route, thread, run)
             built = assembler.build(ctx, specs, lane=lane)
-            res = self._run_lane(client, lane, built, run, specs)
+            res = self._run_lane(client, lane, built, run, specs, wants_draft=bool(DRAFT_WORDS.search(text)))
             self.record(run, lane, route.intent, config.EFFORT["converse"], res, built.block_tokens)
             if (res.data or {}).get("hand_off") and not (run.touched or run.proposals or run.done):
                 self._log_cost(run)
@@ -136,7 +140,7 @@ class Engine:
             summary=thread["summary"], working_set=thread["working_set"], turns=recent, tainted=run.tainted,
             quiet_hours=b.quiet_hours(), budget_left=run.budget.dollars - run.cost)
 
-    def _run_lane(self, client, lane: str, built, run, specs) -> lanes.LaneResult:
+    def _run_lane(self, client, lane: str, built, run, specs, wants_draft: bool = True) -> lanes.LaneResult:
         if lane == "l1":
             res = lanes.call(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
                              system=built.system, messages=built.messages, schema=lanes.REPLY_SCHEMA,
@@ -149,6 +153,8 @@ class Engine:
         seen: dict[str, str] = {}
 
         def execute(name: str, args: dict) -> tuple[str, bool]:
+            if name == "mail_draft" and not wants_draft:  # a draft only when his own words ask for one (DV16)
+                return json.dumps({"error": "Michael didn't ask for a reply or a draft. Don't write one; answer him."}), True
             key = name + json.dumps(args, sort_keys=True)
             if key in seen and by_name.get(name) and by_name[name].tier == tools.Tier.T0:
                 return json.dumps({"same_as_before": True, "note": "You already have this result. Don't call it "
