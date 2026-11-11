@@ -1,8 +1,10 @@
 """One owner DM on the v2 path: event, route, assemble, run, record (02-ARCHITECTURE.md, Event -> run -> action).
 
-The bridge calls Engine.handle() for a DM thread whose engine flag is v2. Every turn is a fresh request built from
-the store: no transcript replay. When something fails the owner hears it with the run ID; there is no silent
-fallback to v1.
+The bridge calls Engine.handle() for every DM (v2 is the default engine, DV13). Every turn is a fresh request built
+from the store: no transcript replay. Three cases hand the message to v1 instead (Reply.handoff): a request the
+router sends to "other" (health, money, YouTube, research: not ported), no API key yet, or a failure before the run
+did anything. A failure after the run acted is never handed off: the owner hears it with the run ID, so nothing
+is done twice.
 """
 from __future__ import annotations
 
@@ -16,8 +18,6 @@ from . import assembler, config, lanes, router, tools
 from .policy import Policy, new_run
 from .store import Store
 
-UNSUPPORTED_REPLY = ("[react:hourglass] That one (training, sleep, money, YouTube or web research) isn't on the new "
-                     "engine yet. Say \"use v1\" and ask again, and the old one handles it. 🙃")
 
 
 @dataclass
@@ -26,6 +26,7 @@ class Reply:
     run_id: str = ""
     cost: float = 0.0
     error: bool = False
+    handoff: bool = False  # v1 answers this one (the bridge runs it and calls note_v1_reply)
 
 
 class _ToolCtx:
@@ -65,9 +66,9 @@ class Engine:
             thread = self.store.thread(channel, self._now())
             route, rres = router.route(client, text, thread["summary"])
             if route.unsupported:
-                self.store.mark_event(event_id, "done")
-                self._remember(channel, text, UNSUPPORTED_REPLY, "", thread, [], thread["tainted"])
-                return Reply(UNSUPPORTED_REPLY)
+                self.store.mark_event(event_id, "handed_off")
+                self.policy.audit("v2_handoff", {"event": event_id, "why": "unsupported", "intent": route.intent})
+                return Reply("", cost=round(rres.cost, 6) if rres else 0.0, handoff=True)
             lane = "l2" if route.needs_tools else "l1"
             budget = config.BUDGETS["deep" if route.complexity == "deep" else lane]
             specs = tools.for_playbook(route.playbook) if lane == "l2" else []
@@ -87,15 +88,31 @@ class Engine:
             if built.overflow:
                 self.policy.audit("v2_overflow", {"run_id": run.run_id, "blocks": built.overflow})
             return Reply(reply, run.run_id, round(run.cost, 6))
-        except Exception as exc:  # the owner hears it; nothing falls back silently
-            self.store.mark_event(event_id, "failed")
+        except Exception as exc:
             ref = run.run_id if run else f"e{event_id}"
-            self.policy.audit("v2_failed", {"run_id": ref, "error": type(exc).__name__, "detail": str(exc)[:200]})
+            acted = bool(run and (run.touched or run.proposals or run.done))
+            self.policy.audit("v2_failed", {"run_id": ref, "error": type(exc).__name__, "detail": str(exc)[:200],
+                                            "handoff": not acted})
             if run:
                 self._log_cost(run, error=True)
-            why = "I don't have the key for it yet" if isinstance(exc, lanes.LaneError) else "it hit an error"
-            return Reply(f"[react:warning] The new engine couldn't answer that ({why}; ref {ref}). Nothing was "
-                         "changed. Say \"use v1\" to switch back, or try again. 🙃", ref, error=True)
+            if not acted:  # nothing happened yet, so v1 can safely take the whole message
+                self.store.mark_event(event_id, "handed_off")
+                return Reply("", ref, round(run.cost, 6) if run else 0.0, error=True, handoff=True)
+            self.store.mark_event(event_id, "failed")
+            done = "; ".join(run.done) or "part of it"
+            return Reply(f"[react:warning] That stopped partway with an error (ref {ref}). Already done: {done}. "
+                         "Check that before asking again, so nothing happens twice. 🙃", ref, error=True)
+
+    def note_v1_reply(self, channel: str, text: str, reply: str) -> None:
+        """v1 answered a handed-off message: keep both turns so the next v2 turn knows what was said. v1 may have
+        read mail, web pages or transcripts, so the thread is tainted (a hold becomes a card until it goes quiet)."""
+        thread = self.store.thread(channel, self._now())
+        self._remember(channel, text, reply, "", thread, [], True)
+
+    def recent_lines(self, channel: str, limit: int = 4) -> str:
+        """The last few turns, as plain lines for a v1 handoff prompt."""
+        return "\n".join(f"{'Michael' if t['role'] == 'user' else 'You'}: {t['text'][:300]}"
+                         for t in self.store.turns(channel, limit))
 
     def reset(self, channel: str) -> None:
         self.store.save_thread(channel, summary="", working_set=[], tainted=False)

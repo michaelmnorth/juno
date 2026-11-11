@@ -68,7 +68,7 @@ DIALOGUES = [
         {"say": "Thanks, that's all for tonight", "not_calls": ["hold", "draft", "reminder_add", "note_add"],
          "no_cards": True}]},
     {"id": "unsupported", "turns": [
-        {"say": "How did I sleep last night?", "says": ["v1", "isn't", "not"]}]},
+        {"say": "How did I sleep last night?", "handoff": True}]},
     {"id": "follow-up-next-day", "next_day": True, "turns": [
         {"say": "Hold Friday 4 to 5 for prep", "calls": ["hold"]},
         {"say": "Remove that hold", "calls": ["undo_hold"], "after_hours": 14}]},

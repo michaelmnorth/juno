@@ -26,8 +26,10 @@ from v2.store import Store  # noqa: E402
 START = datetime(2026, 11, 12, 14, 0, tzinfo=timezone.utc)  # Thursday 9 AM Eastern
 
 
-def grade_turn(turn: dict, calls: list[str], cards: list[str], reply: str) -> list[str]:
+def grade_turn(turn: dict, calls: list[str], cards: list[str], reply: str, handoff: bool = False) -> list[str]:
     misses = []
+    if turn.get("handoff") != handoff and (turn.get("handoff") or handoff):
+        misses.append("expected a handoff to v1" if turn.get("handoff") else "handed off to v1 unexpectedly")
     for c in turn.get("calls", []):
         if c not in calls:
             misses.append(f"expected {c}")
@@ -62,7 +64,7 @@ def run_one(d: dict, client_factory=None) -> dict:
             calls = [c[0] for c in world.calls[seen:]]
             cards = [c["action_class"] for c in _cards(root)[len(cards_before):]]
             text = reply.text if reply else ""
-            misses = grade_turn(turn, calls, cards, text)
+            misses = grade_turn(turn, calls, cards, text, bool(reply and reply.handoff))
             out["turns"].append({"say": turn["say"], "calls": calls, "cards": cards, "reply": text[:400],
                                  "misses": misses, "cost": reply.cost if reply else 0})
             out["cost"] += reply.cost if reply else 0

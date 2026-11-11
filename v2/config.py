@@ -51,4 +51,5 @@ FIRST_REQUEST_TARGET = 8000
 TOOL_RESULT_TOKENS = 800
 MAX_OUTPUT = {"router": 512, "reader": 1024, "converse": 4096}
 THREAD_IDLE_HOURS = 24  # a quiet thread closes: its taint clears; summary and working set carry over
+DEFAULT_ENGINE = "v2"  # every new chat; "use v1" pins one chat to the old engine (DV13)
 RECENT_TURNS = 6

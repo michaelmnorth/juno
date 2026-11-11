@@ -96,3 +96,22 @@ The brief asks for the dialogue set to run on v1's resumed-session path first. T
 world through v2's typed tools (`evals/world.py`); v1 calls the real Gmail and Calendar scripts and has no seam for
 a fake backend. Options: score v1 by hand on the same 22 scripts in a scratch Slack DM (about 50 messages), or
 accept v2's absolute score with the 90% gate. Owner to choose before real DMs move.
+
+## DV13 · v2 is the default engine and hands off to v1 (affects the P1 brief, deliverable 8; owner 2026-11-11)
+
+The brief puts v2 behind a per-chat flag and says a failure answers with a ref and never falls back. The owner
+asked to be fully on v2 with no engine switching. Now every DM goes to v2 first (`v2/config.py` `DEFAULT_ENGINE`).
+v2 hands the message to v1 (`Reply.handoff`) in three cases only: the router sends it to "other" (health and the
+coach sheet, money, YouTube, research: not ported); there is no API key yet; or the run failed before it touched,
+proposed or did anything. A failure after the run acted is never handed off, so nothing happens twice; the owner
+hears what was already done and the ref. v1's answer is kept as a turn in the v2 thread, which taints it (v1 may
+have read mail, pages or transcripts), and v1's prompt carries the last few v2 turns. "use v1" still pins one chat
+to v1 as a rollback. Until the key exists, every DM lands on v1 at no extra cost (no model call is made).
+
+Effect on the gate: handed-off turns cost a router call plus v1 and are not v2 turns; the 7-day p50 and p95 are read
+from the ledger rows of v2 runs only. The dialogue set grades the "unsupported" dialogue as a handoff.
+
+## DV14 · DV12 resolved: v2's absolute score with the 90% gate (owner 2026-11-11)
+
+The owner chose to be fully on v2 without a side-by-side v1 run, so the v1 baseline is skipped. The gate is the
+dialogue set at 90% or better plus the 7-day cost targets.

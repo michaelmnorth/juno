@@ -384,20 +384,37 @@ def test_duplicate_slack_delivery_is_answered_once(env):
     assert e.handle("C1", "hi", "C1:7") is None
 
 
-def test_failure_reports_a_ref_and_does_not_fall_back(env):
+def test_no_key_hands_the_message_to_v1(env):
     def broken():
         raise lanes.LaneError("no API key for the new engine yet")
     e = Engine(env.root, env.backend, client_factory=broken, now=lambda: NOW,
                store=Store(env.root / "state" / "v2.db"))
     reply = e.handle("C1", "hi", "C1:8")
-    assert reply.error and "ref e" in reply.text and "use v1" in reply.text
-    assert not env.backend.calls
+    assert reply.handoff and reply.text == "" and not env.backend.calls
 
 
-def test_unsupported_request_says_so_without_a_converse_call(env):
+def test_failure_after_an_action_reports_a_ref_and_is_not_handed_off(env):
+    e = env.make([route_resp("notes"), tool_call("reminder_add", {"text": "x", "due": "2026-11-13T09:00"})])
+    reply = e.handle("C1", "remind me", "C1:11")  # the script runs out after the tool: the next request fails
+    assert reply.error and not reply.handoff and "ref " in reply.text and "Already done" in reply.text
+    assert [c for c in env.backend.calls if c[0] == "reminder_add"]
+
+
+def test_unsupported_request_goes_to_v1_without_a_converse_call(env):
     e = env.make([route_resp("other", needs_tools=True)])
     reply = e.handle("C1", "how was my sleep", "C1:9")
-    assert "isn't on the new engine yet" in reply.text and len(env.holder["client"].requests) == 1
+    assert reply.handoff and len(env.holder["client"].requests) == 1
+
+
+def test_v1_reply_is_kept_and_taints_the_thread(env):
+    e = env.make([])
+    e.note_v1_reply("C1", "how was my sleep", "[react:+1] 7h 10m, decent")
+    t = e.store.thread("C1", NOW)
+    assert t["tainted"] and "7h 10m" in e.recent_lines("C1")
+
+
+def test_new_chats_default_to_v2(env):
+    assert Store(env.root / "state" / "v2.db").engine("C-new") == "v2"
 
 
 def test_budget_stop_says_what_was_done(env):
@@ -409,7 +426,7 @@ def test_budget_stop_says_what_was_done(env):
 
 # --- the bridge flag ---------------------------------------------------------------------------------------------
 
-def test_bridge_switches_a_chat_between_engines(tmp_path, monkeypatch):
+def test_bridge_runs_v2_first_and_hands_off_to_v1(tmp_path, monkeypatch):
     import slack_bridge
     from state_store import Approvals, SessionMap
 
@@ -420,10 +437,18 @@ def test_bridge_switches_a_chat_between_engines(tmp_path, monkeypatch):
 
         def handle(self, channel, text, dedupe):
             self.seen.append((channel, text, dedupe))
-            return NS(text="[react:+1] from v2", error=False)
+            if "sleep" in text:
+                return NS(text="", error=False, handoff=True)
+            return NS(text="[react:+1] from v2", error=False, handoff=False)
 
         def reset(self, channel):
             self.seen.append(("reset", channel))
+
+        def recent_lines(self, channel):
+            return "Michael: hello"
+
+        def note_v1_reply(self, channel, text, reply):
+            self.seen.append(("noted", text, reply))
 
     v1_calls = []
     engine = FakeEngine()
@@ -432,13 +457,16 @@ def test_bridge_switches_a_chat_between_engines(tmp_path, monkeypatch):
                             approvals=Approvals(tmp_path / "a.json"), v2_engine=engine,
                             runner=lambda *a, **k: v1_calls.append(a) or NS(text="from v1", session_id="s1",
                                                                             is_error=False, raw={}))
-    assert "New engine on" in b.handle_dm("D1", "U1", "use v2")
-    assert b.handle_dm("D1", "U1", "hello", dedupe="D1:1") == "[react:+1] from v2"
+    assert b.handle_dm("D1", "U1", "hello", dedupe="D1:1") == "[react:+1] from v2"  # v2 by default
     assert engine.seen[-1] == ("D1", "hello", "D1:1") and not v1_calls
+    assert b.handle_dm("D1", "U1", "how did I sleep", dedupe="D1:2") == "from v1"  # handed off
+    assert "lighter engine" in v1_calls[-1][0] and ("noted", "how did I sleep", "from v1") in engine.seen
     b.handle_dm("D1", "U1", "/new")
     assert ("reset", "D1") in engine.seen
     assert "old engine" in b.handle_dm("D1", "U1", "use v1")
-    assert b.handle_dm("D1", "U1", "hello again") == "from v1" and v1_calls
+    n = len(engine.seen)
+    assert b.handle_dm("D1", "U1", "hello again") == "from v1" and len(engine.seen) == n
+    assert "back on" in b.handle_dm("D1", "U1", "use v2")
 
 
 # --- the dialogue set ------------------------------------------------------------------------------------------

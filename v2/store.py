@@ -1,7 +1,7 @@
 """The v2 store: one SQLite file in the instance's state folder (state/v2.db, git-ignored).
 
 - events: durable, idempotent inbound events (a DM keyed by its Slack timestamp). Never dropped on restart.
-- threads: one per DM channel. Engine flag (v1 or v2), rolling summary, working set, taint, last activity.
+- threads: one per DM channel. Engine flag (v2 by default; "use v1" pins a chat to v1), rolling summary, working set, taint, last activity.
 - turns: the thread's turns, kept so the summary and the last few turns can be rebuilt without a transcript.
 - ledger: one row per model call, with token counts per assembled block (03-CONTEXT-AND-COST.md, Ledger).
 """
@@ -90,7 +90,8 @@ class Store:
     def thread(self, channel: str, now: datetime | None = None) -> dict:
         rows = self._all("select * from threads where channel=?", (channel,))
         if not rows:
-            self._exec("insert into threads (channel, updated) values (?,?)", (channel, now_iso()))
+            self._exec("insert into threads (channel, engine, updated) values (?,?,?)",
+                       (channel, config.DEFAULT_ENGINE, now_iso()))
             rows = self._all("select * from threads where channel=?", (channel,))
         t = dict(rows[0])
         t["working_set"] = json.loads(t["working_set"] or "[]")

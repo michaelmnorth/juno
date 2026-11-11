@@ -116,7 +116,7 @@ HANDOFF_PROMPT = ("Session handoff: this conversation is being closed after 12 h
                   "with only these three lines, under 120 words in all, facts from this conversation only, 'none' "
                   "where empty:\nOpen threads: ...\nPromised Michael: ...\nDecided: ...")
 HANDOFF_MAX = 1500
-V2_ON = ("use v2", "/v2", "v2 on", "new engine")  # the per-chat engine flag (P1 brief, deliverable 8)
+V2_ON = ("use v2", "/v2", "v2 on", "new engine")  # v2 is the default (DV13); these undo a "use v1" pin
 V2_OFF = ("use v1", "/v1", "v2 off", "old engine")
 SLACK_MAX = 3900
 
@@ -551,16 +551,14 @@ class Bridge:
         text = (text or "").strip()
         if text.lower() in ("/new", "new session", "reset"):
             self.sessions.reset(channel)
-            if self.v2.store.engine(channel) == "v2":
-                self.v2.reset(channel)
+            self.v2.reset(channel)
             return "Fresh session. What's next?"
         if text.lower() in V2_ON:
             self.v2.store.set_engine(channel, "v2")
-            return ("New engine on for this chat. 🧪 Calendar, mail, reminders, notes and people work here; "
-                    "say \"use v1\" any time to switch back.")
+            return "New engine back on for this chat. 🫡"
         if text.lower() in V2_OFF:
             self.v2.store.set_engine(channel, "v1")
-            return "Back on the old engine. 🫡"
+            return "This chat is on the old engine until you say \"use v2\". 🫡"
         if text.lower() in ("status", "/status"):
             return self.status_text()
         if text.lower() in brakes.PAUSE_WORDS:
@@ -572,24 +570,30 @@ class Bridge:
         stop = brakes.blocked(self.root)
         if stop == "paused":
             return "Still paused. Say resume when you want me back. 😴"
+        ping_answered(self.root)
+        from_v2 = ""
         if self.v2.store.engine(channel) == "v2":
-            ping_answered(self.root)
             with RUN_LOCK:  # one state-writing run at a time, as on v1
                 reply = self.v2.handle(channel, text, dedupe or f"dm-{time.time_ns()}")
             if reply is None:
                 return ""  # a Slack retry of a message already answered
-            heartbeat("dm-v2", not reply.error, reply.text[:120])
-            return self._with_spend_notice(reply.text)
+            if not reply.handoff:
+                heartbeat("dm-v2", not reply.error, reply.text[:120])
+                return self._with_spend_notice(reply.text)
+            # v2 can't take this one (not ported, no key, or it failed before doing anything): v1 answers (DV13)
+            heartbeat("dm-v2", True, "handed to v1")
+            from_v2 = self.v2.recent_lines(channel)
         resume = self.sessions.get(channel)
         handoff = self.handoff(channel) if resume is None else ""
         prompt = ((f"[Where the last session left off]\n{handoff}\n\n" if handoff else "") +
+                  (f"[Recent messages in this chat, answered by the lighter engine]\n{from_v2}\n\n"
+                   if from_v2 else "") +
                   f"[Slack DM from Michael]\n{text}\n\n(Always answer, even when he is only sharing news or a photo: "
                   "acknowledge it in a line or two. If it tells you something durable about him or someone in people/, "
                   "save it this session per the silent-learning rules without announcing it; the recap lists it. "
                   "Start almost every reply with one reaction tag for his message, picked to fit and varied, like "
                   "[react:smile] for thanks, [react:joy] for a joke, [react:wink] when you're ribbing him, "
                   "[react:saluting_face] or [react:+1] for a task done. The bridge puts it on his message.)")
-        ping_answered(self.root)
         turns, dollars = ping_policy.JOB_LIMITS["dm"]
         result = self._run(prompt, cwd=self.root, resume=resume, unattended=False, dry_run=self.dry_run, job="dm",
                            model=ping_policy.DM_MODEL, effort=ping_policy.DM_EFFORT, max_turns=turns,
@@ -602,6 +606,8 @@ class Bridge:
         if result.session_id:
             self.sessions.set(channel, result.session_id)
         heartbeat("dm", not result.is_error, result.text[:120])
+        if self.v2.store.engine(channel) == "v2" and not result.is_error:
+            self.v2.note_v1_reply(channel, text, result.text)  # so v2's next turn knows what v1 said
         return self._with_spend_notice(result.text)
 
     def handoff(self, channel: str) -> str:
