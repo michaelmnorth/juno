@@ -29,6 +29,7 @@ Last updated 2026-11-11.
 | Calendar | Reads, free slots in code, holds with no tap; invites need a tap |
 | Briefs | Morning brief and evening check-in; dated reminders and one-shot pings |
 | People | Contacts connected; profiles build themselves through Save/Skip cards |
+| Discord server | Channels and categories: create, rename, topic, move, archive; no delete (DV17) |
 | Health | Hevy puller and the coach-sheet sync. Sleep, weight and macros not connected |
 | Finance | No data connected |
 | YouTube | Transcripts, search, daily watch digest |

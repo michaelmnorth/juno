@@ -30,7 +30,7 @@ SCHEMA = {
 SYSTEM = ("Route one direct message from Michael to his personal assistant. Playbooks: calendar (scheduling, holds, "
           "invites, free time), mail (find, read, draft, send email), people (someone in his life, birthdays, "
           "prep, addresses), notes (reminders, notes, what he said before), general (chat, news, anything else the "
-          "others don't cover), other (training, sleep, money accounts and taxes, YouTube, web research). "
+          "others don't cover), other (training, sleep, money accounts and taxes, YouTube, web research, his Discord server and its channels). "
           "A bill, receipt or any question about an email is mail. A follow-up like 'move that to 4', 'remove it' "
           "or 'send it' keeps the previous playbook and needs tools.")
 
