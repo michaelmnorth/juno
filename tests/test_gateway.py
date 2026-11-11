@@ -753,3 +753,17 @@ def test_runs_carry_only_junos_built_in_tools(tmp_path, monkeypatch):
     assert lean[lean.index("--tools") + 1] == ""  # a words-only call still has no tools at all
     monkeypatch.setenv("JUNO_TOOLS", "all")
     assert "--tools" not in claude_runner.run("x", cwd=tmp_path, dry_run=True).command
+
+
+def test_late_secrets_are_picked_up_without_a_restart(monkeypatch):
+    import slack_bridge
+    monkeypatch.delenv("JUNO_V2_API_KEY", raising=False)
+    monkeypatch.delenv("JUNO_HEARTBEAT_URL", raising=False)
+    assert slack_bridge.refresh_late_secrets(loader=lambda: ["JUNO_V2_API_KEY"]) == ["JUNO_V2_API_KEY"]
+
+    def broken():
+        raise OSError("op not found")
+    assert slack_bridge.refresh_late_secrets(loader=broken) == []
+    monkeypatch.setenv("JUNO_V2_API_KEY", "x")
+    monkeypatch.setenv("JUNO_HEARTBEAT_URL", "https://x")
+    assert slack_bridge.refresh_late_secrets(loader=lambda: 1 / 0) == []  # both present: no 1Password call

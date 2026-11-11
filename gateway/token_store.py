@@ -120,26 +120,29 @@ def load_into_env() -> None:
         os.environ.update(fetch_tokens())
     if not all(os.environ.get(name) for name in OPTIONAL_REFS):
         os.environ.update(fetch_optional())
-    name, ref = HEARTBEAT_REF
-    if not os.environ.get(name):
+    load_late_secrets()
+
+
+LATE_REFS = ((HEARTBEAT_REF, "https://"), (API_KEY_REF, "sk-ant-"))
+
+
+def load_late_secrets() -> list[str]:
+    """Load the heartbeat URL and the v2 API key if they are missing and 1Password has them now (they are often
+    added after the bridge started). Returns the names newly loaded, never the values."""
+    loaded = []
+    for (name, ref), prefix in LATE_REFS:
+        if os.environ.get(name):
+            continue
         try:
             import keyring
             key = keyring.get_password(SERVICE, OP_KEY)
             value = read_ref(find_op(), ref, key) if key else ""
         except (TokenError, OSError, ImportError):
             value = ""
-        if value.startswith("https://"):
+        if value.startswith(prefix):
             os.environ[name] = value
-    name, ref = API_KEY_REF
-    if not os.environ.get(name):
-        try:
-            import keyring
-            key = keyring.get_password(SERVICE, OP_KEY)
-            value = read_ref(find_op(), ref, key) if key else ""
-        except (TokenError, OSError, ImportError):
-            value = ""
-        if value.startswith("sk-ant-"):
-            os.environ[name] = value
+            loaded.append(name)
+    return loaded
 
 
 def store_op_token() -> int:

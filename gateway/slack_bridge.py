@@ -1378,6 +1378,23 @@ def hevy_watcher(client, bridge: Bridge) -> None:
 HEARTBEAT_EVERY_MIN = 5
 
 
+def refresh_late_secrets(loader=None) -> list[str]:
+    """Pick up the heartbeat URL or the v2 key once they land in 1Password. Logs names only."""
+    if os.environ.get("JUNO_HEARTBEAT_URL") and os.environ.get("JUNO_V2_API_KEY"):
+        return []
+    try:
+        if loader is None:
+            import token_store
+            loader = token_store.load_late_secrets
+        loaded = loader()
+    except Exception as exc:  # never let a 1Password hiccup stop the scheduler
+        LOG.warning("late secrets check failed: %s", type(exc).__name__)
+        return []
+    for name in loaded:
+        LOG.info("picked up %s from 1Password", name)
+    return loaded
+
+
 def external_heartbeat(url: str | None = None, opener=None) -> bool:
     """Check in with the outside monitor. If these stop (PC asleep, bridge crashed), the monitor alerts Michael's
     phone. No URL configured: does nothing. Never raises."""
@@ -1423,13 +1440,16 @@ def start_scheduler(client, bridge: Bridge):
         LOG.info("scheduled %s: %s", spec["job"], spec["trigger"])
     if (bridge.root / "me" / "backup.yaml").exists():
         sched.add_job(nightly_backup, CronTrigger(hour=3, minute=30, timezone=ZoneInfo("America/New_York")),
-                      args=(client, bridge), id="backup", misfire_grace_time=3600, coalesce=True)
-        LOG.info("scheduled backup: 03:30")
-    if os.environ.get("JUNO_HEARTBEAT_URL"):
-        from apscheduler.triggers.interval import IntervalTrigger
-        sched.add_job(external_heartbeat, IntervalTrigger(minutes=HEARTBEAT_EVERY_MIN), id="external-heartbeat",
-                      coalesce=True, max_instances=1)
-        external_heartbeat()
+                      args=(client, bridge), id="backup", misfire_grace_time=20 * 3600, coalesce=True)
+        LOG.info("scheduled backup: 03:30 (runs on wake if the PC slept through it)")
+    from apscheduler.triggers.interval import IntervalTrigger
+    # The heartbeat job always runs; it does nothing until the URL exists. Late secrets (the heartbeat URL and the v2
+    # key, often added after start) are picked up every 15 minutes, so filling them in needs no restart.
+    sched.add_job(external_heartbeat, IntervalTrigger(minutes=HEARTBEAT_EVERY_MIN), id="external-heartbeat",
+                  coalesce=True, max_instances=1)
+    sched.add_job(refresh_late_secrets, IntervalTrigger(minutes=15), id="late-secrets", coalesce=True,
+                  max_instances=1)
+    external_heartbeat()
     sched.start()
     return sched
 
