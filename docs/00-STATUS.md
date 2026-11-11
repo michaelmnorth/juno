@@ -9,7 +9,9 @@ Last updated 2026-11-11.
 ## Where things live
 
 - **Code:** public GitHub repo `michaelmnorth/juno`, branch `main`. It holds no personal data; `tests/test_no_personal.py`
-  fails if a name, address or private word from the local personal layer reaches a tracked file.
+  fails if a name, address or private word from the local personal layer reaches a tracked file. `main` is protected
+  (CI must pass, no force pushes or deletion; the owner can still push). Secret scanning with push protection,
+  Dependabot alerts and security fixes are on.
 - **Personal layer:** on this PC only, git-ignored (`me/`, `people/`, `observed/`, `learnings/`, `state/`, `data/`,
   `logs/`, `domains/*/CONTEXT.md`, every `private/` folder). The encrypted backup (`tools/backup.py`) copies it off the
   box.
@@ -51,13 +53,15 @@ The freeze (`docs/v2/FREEZE.md`) holds new agents, skills and loops until P1 exi
 
 ## Waiting on Michael
 
-1. Backups: the first real backup and a restore drill ran 2026-11-11 (581 files, drill clean). The nightly 3:30 job
-   has not fired yet, likely because the PC sleeps; allow wake timers or move the time.
-2. Create the external heartbeat monitor and store its URL in 1Password.
+1. **The API key for P1**: make an Anthropic key at console.anthropic.com, paste it into the `Anthropic-Juno` item
+   (field `api_key`; the Slack card made the empty item), and set a $40 monthly alert in the Console. The bridge picks
+   it up within 15 minutes, no restart. Then the dialogue run (about $1).
+2. Create the external heartbeat monitor and store its URL in 1Password; also picked up within 15 minutes.
 3. Revoke the old read-only service account in 1Password, if still there.
-4. The API key for P1: an Anthropic key in 1Password as `Anthropic-Juno` (field `api_key`), with a $40 monthly
-   alert in the Console. Then the dialogue run (about $1). No switch needed: v2 picks up DMs once the key loads.
-5. P3 host: home machine or cloud VM (default home).
+4. P3 host: home machine or cloud VM (default home).
+
+Backups: first real backup and restore drill clean on 2026-11-11 (581 files). The nightly 3:30 run now catches up on
+wake when the PC slept through it.
 
 ## Parked (`docs/v2/BACKLOG.md`)
 
