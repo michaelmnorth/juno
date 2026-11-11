@@ -1506,7 +1506,8 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=timers_watcher, args=(app.client, bridge), daemon=True).start()
     threading.Thread(target=hevy_watcher, args=(app.client, bridge), daemon=True).start()
     heartbeat("bridge", True, "started")
-    LOG.info("Juno bridge up; allowlist=%s", sorted(bridge.allowlist))
+    LOG.info("Juno bridge up; allowlist=%s; v2 key %s", sorted(bridge.allowlist),
+             "loaded" if os.environ.get("JUNO_V2_API_KEY") else "missing (DMs go to v1)")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
     return 0
 
