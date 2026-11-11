@@ -22,8 +22,10 @@ REPLY_SCHEMA = {
     "properties": {
         "reaction": {"type": "string", "description": "one Slack emoji name for his message, e.g. +1, wink, joy"},
         "reply": {"type": "string", "description": "the message to Michael"},
+        "hand_off": {"type": "boolean", "description": "true only when this needs something you have no tool for; "
+                                                       "the full assistant answers instead and reply is ignored"},
     },
-    "required": ["reaction", "reply"],
+    "required": ["reaction", "reply", "hand_off"],
     "additionalProperties": False,
 }
 

@@ -64,7 +64,8 @@ class Engine:
         try:
             client = self.client_factory()
             thread = self.store.thread(channel, self._now())
-            route, rres = router.route(client, text, thread["summary"])
+            mine = [t["text"] for t in self.store.turns(channel, config.RECENT_TURNS) if t["role"] == "user"]
+            route, rres = router.route(client, text, thread["summary"], mine, thread.get("playbook", ""))
             if route.unsupported:
                 self.store.mark_event(event_id, "handed_off")
                 self.policy.audit("v2_handoff", {"event": event_id, "why": "unsupported", "intent": route.intent})
@@ -81,7 +82,13 @@ class Engine:
             built = assembler.build(ctx, specs, lane=lane)
             res = self._run_lane(client, lane, built, run, specs)
             self.record(run, lane, route.intent, config.EFFORT["converse"], res, built.block_tokens)
+            if (res.data or {}).get("hand_off") and not (run.touched or run.proposals or run.done):
+                self._log_cost(run)
+                self.store.mark_event(event_id, "handed_off")
+                self.policy.audit("v2_handoff", {"run_id": run.run_id, "why": "model", "intent": route.intent})
+                return Reply("", run.run_id, round(run.cost, 6), handoff=True)
             reply = self._reply_text(res, run)
+            self.store.set_playbook(channel, route.playbook)
             self._remember(channel, text, reply, run.run_id, thread, run.touched, run.tainted)
             self._log_cost(run)
             self.store.mark_event(event_id, "done")
@@ -139,8 +146,13 @@ class Engine:
             return res
         tctx = _ToolCtx(self, run, client)
         by_name = {s.name: s for s in specs}
+        seen: dict[str, str] = {}
 
         def execute(name: str, args: dict) -> tuple[str, bool]:
+            key = name + json.dumps(args, sort_keys=True)
+            if key in seen and by_name.get(name) and by_name[name].tier == tools.Tier.T0:
+                return json.dumps({"same_as_before": True, "note": "You already have this result. Don't call it "
+                                   "again; use what you have."}), False
             spec = by_name.get(name)
             d = self.policy.decide(run, spec, args)
             if d.verdict == "deny":
@@ -161,7 +173,10 @@ class Engine:
             self.policy.on_result(run, spec, args, result)
             if not result.is_error and spec.tier in (tools.Tier.T1, tools.Tier.T3a):
                 run.done.append(spec.name)
-            return tools.cap(result.content, spec.max_result_tokens), result.is_error
+            out = tools.cap(result.content, spec.max_result_tokens)
+            if not result.is_error:
+                seen[key] = out
+            return out, result.is_error
 
         return lanes.loop(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
                           system=built.system, messages=built.messages, tools=built.tools, run=run, execute=execute,

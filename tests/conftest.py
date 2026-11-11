@@ -32,3 +32,12 @@ def _no_real_state(monkeypatch, tmp_path):
     scratch = tmp_path / "_state"
     scratch.mkdir(exist_ok=True)
     monkeypatch.setattr(state_store, "STATE", scratch)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_model_key(monkeypatch):
+    """No test spends real money: the v2 key is never in a test's environment, and nothing loads it from 1Password."""
+    import token_store
+
+    monkeypatch.delenv("JUNO_V2_API_KEY", raising=False)
+    monkeypatch.setattr(token_store, "load_late_secrets", lambda: [])

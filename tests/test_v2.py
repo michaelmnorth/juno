@@ -452,7 +452,7 @@ def test_bridge_runs_v2_first_and_hands_off_to_v1(tmp_path, monkeypatch):
 
     v1_calls = []
     engine = FakeEngine()
-    monkeypatch.setattr(slack_bridge, "load_allowlist", lambda root: {"U1"})
+    monkeypatch.setattr(slack_bridge, "load_allowlist", lambda root, channel=None: {"U1"})
     b = slack_bridge.Bridge(root=tmp_path, sessions=SessionMap(tmp_path / "s.json"),
                             approvals=Approvals(tmp_path / "a.json"), v2_engine=engine,
                             runner=lambda *a, **k: v1_calls.append(a) or NS(text="from v1", session_id="s1",

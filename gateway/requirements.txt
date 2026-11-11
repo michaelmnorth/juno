@@ -5,3 +5,5 @@ pyyaml>=6
 tzdata>=2024.1
 keyring>=25
 anthropic>=2.8
+discord.py>=2.6,<2.7
+emoji>=2.12,<3

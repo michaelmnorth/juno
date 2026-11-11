@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The bridge needs these to reach Slack, 1Password and Google. Claude runs and their tools never do.
-SECRET_ENV_PREFIXES = ("SLACK_", "OP_", "GOOGLE_", "JUNO_V2_API_KEY")
+SECRET_ENV_PREFIXES = ("SLACK_", "DISCORD_", "OP_", "GOOGLE_", "JUNO_V2_API_KEY")
 
 
 def child_env() -> dict[str, str]:

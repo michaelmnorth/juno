@@ -21,7 +21,8 @@ create table if not exists events (
   payload text not null, status text not null default 'new', created text not null, updated text);
 create table if not exists threads (
   channel text primary key, engine text not null default 'v1', summary text not null default '',
-  working_set text not null default '[]', tainted integer not null default 0, updated text);
+  working_set text not null default '[]', tainted integer not null default 0, updated text,
+  playbook text not null default '');
 create table if not exists turns (
   id integer primary key, channel text not null, role text not null, text text not null, run_id text, at text not null);
 create table if not exists ledger (
@@ -53,6 +54,9 @@ class Store:
         self._con.row_factory = sqlite3.Row
         with self._lock:
             self._con.executescript(SCHEMA)
+            cols = {r[1] for r in self._con.execute("pragma table_info(threads)")}
+            if "playbook" not in cols:  # databases made before the column existed
+                self._con.execute("alter table threads add column playbook text not null default ''")
             self._con.commit()
 
     def close(self) -> None:
@@ -115,6 +119,9 @@ class Store:
         self._exec("update threads set summary=?, working_set=?, tainted=?, updated=? where channel=?",
                    (summary, json.dumps(working_set[-WORKING_SET_MAX:], ensure_ascii=False), int(tainted),
                     now_iso(), channel))
+
+    def set_playbook(self, channel: str, playbook: str) -> None:
+        self._exec("update threads set playbook=? where channel=?", (playbook, channel))
 
     def clear_taint(self, channel: str) -> None:
         self._exec("update threads set tainted=0 where channel=?", (channel,))

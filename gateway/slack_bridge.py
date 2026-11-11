@@ -122,13 +122,26 @@ SLACK_MAX = 3900
 
 # --- configuration --------------------------------------------------------------------------------
 
-def load_allowlist(root: Path = ROOT) -> set[str]:
+def load_channel(root: Path = ROOT) -> str:
+    """Which chat app Juno lives in: me/channel.yaml `channel: slack` (the default) or `channel: discord` (DV15)."""
+    import yaml
+    path = root / "me" / "channel.yaml"
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, yaml.YAMLError):
+        data = {}
+    return "discord" if str((data or {}).get("channel", "")).strip().lower() == "discord" else "slack"
+
+
+def load_allowlist(root: Path = ROOT, channel: str | None = None) -> set[str]:
+    """Michael's user id(s) on the active chat app, from me/notify-allowlist.json ({"slack": [...], "discord": [...]})."""
+    channel = channel or load_channel(root)
     path = root / "me" / "notify-allowlist.json"
     if not path.exists():
         return set()
     data = json.loads(path.read_text(encoding="utf-8-sig"))
-    env_users = {u.strip() for u in os.environ.get("SLACK_ALLOWED_USERS", "").split(",") if u.strip()}
-    return {str(u) for u in data.get("slack", [])} | env_users
+    env_users = {u.strip() for u in os.environ.get(f"{channel.upper()}_ALLOWED_USERS", "").split(",") if u.strip()}
+    return {str(u) for u in data.get(channel, [])} | env_users
 
 
 def load_proactivity(root: Path = ROOT) -> dict:
@@ -348,13 +361,17 @@ IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "ima
 IMAGE_MAX = 10 * 1024 * 1024  # Claude's image reader tops out near here anyway
 
 
-def save_images(event: dict, token: str, root: Path = ROOT, fetch=None) -> dict[str, str]:
+SLACK_FILE_HOSTS = ("https://files.slack.com/",)
+
+
+def save_images(event: dict, token: str, root: Path = ROOT, fetch=None,
+                hosts: tuple[str, ...] = SLACK_FILE_HOSTS) -> dict[str, str]:
     """Download the photos Michael attached (files:read, added 2026-11-08) to state/attachments/ (git-ignored), so
     the DM run can Read them. Files are named by message ts, never by the uploaded name. Returns {file id: path}."""
     import urllib.request
 
     def default_fetch(url: str) -> bytes:
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"} if token else {})
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.read(IMAGE_MAX + 1)
 
@@ -362,7 +379,7 @@ def save_images(event: dict, token: str, root: Path = ROOT, fetch=None) -> dict[
     out = {}
     for n, f in enumerate(event.get("files") or []):
         ext, url = IMAGE_TYPES.get(f.get("mimetype", "")), f.get("url_private_download") or f.get("url_private")
-        if not ext or not url or not url.startswith("https://files.slack.com/") or (f.get("size") or 0) > IMAGE_MAX:
+        if not ext or not url or not url.startswith(tuple(hosts)) or (f.get("size") or 0) > IMAGE_MAX:
             continue
         try:
             data = fetch(url)
@@ -522,7 +539,8 @@ class Bridge:
         self.approvals = approvals or Approvals()
         self.runner = runner
         self.dry_run = dry_run
-        self.allowlist = load_allowlist(root)
+        self.channel = load_channel(root)
+        self.allowlist = load_allowlist(root, self.channel)
         self.send_email = send_email  # None: the real Gmail sender, looked up at call time
         self._v2 = v2_engine  # built on first use (docs/v2/briefs/P1-context-engine.md)
 
@@ -588,7 +606,7 @@ class Bridge:
         prompt = ((f"[Where the last session left off]\n{handoff}\n\n" if handoff else "") +
                   (f"[Recent messages in this chat, answered by the lighter engine]\n{from_v2}\n\n"
                    if from_v2 else "") +
-                  f"[Slack DM from Michael]\n{text}\n\n(Always answer, even when he is only sharing news or a photo: "
+                  f"[{self.channel.title()} DM from Michael]\n{text}\n\n(Always answer, even when he is only sharing news or a photo: "
                   "acknowledge it in a line or two. If it tells you something durable about him or someone in people/, "
                   "save it this session per the silent-learning rules without announcing it; the recap lists it. "
                   "Start almost every reply with one reaction tag for his message, picked to fit and varied, like "
@@ -860,11 +878,13 @@ def no_unfurl(client_cls) -> None:
     client_cls.chat_postMessage = chat_postMessage
 
 
-def build_app(bridge: Bridge):
-    from slack_bolt import App
-    from slack_sdk import WebClient
-    no_unfurl(WebClient)
-    app = App(token=os.environ["SLACK_BOT_TOKEN"])
+def build_app(bridge: Bridge, app=None):
+    """Every DM and tap handler, on Slack's Bolt app, or on gateway/discord_transport.App (same shapes, DV15)."""
+    if app is None:
+        from slack_bolt import App
+        from slack_sdk import WebClient
+        no_unfurl(WebClient)
+        app = App(token=os.environ["SLACK_BOT_TOKEN"])
     batches = Debouncer(lambda channel, items: answer_batch(app.client, bridge, channel, items))
 
     @app.event("message")
@@ -874,11 +894,12 @@ def build_app(bridge: Bridge):
         if not bridge.allowed(event.get("user")):
             return
         try:
-            latency = time.time() - float(event["ts"])
-        except (KeyError, ValueError):
+            latency = time.time() - float(event.get("sent_at") or event["ts"])
+        except (KeyError, TypeError, ValueError):
             latency = None
         acknowledge(client, event["channel"], event["ts"], latency)  # eyes, then the working line, at once
-        saved = save_images(event, client.token, bridge.root) if event.get("files") else {}
+        saved = (save_images(event, client.token, bridge.root, hosts=getattr(client, "file_hosts", SLACK_FILE_HOSTS))
+                 if event.get("files") else {})
         batches.submit(event["channel"], {"ts": event["ts"], "user": event.get("user"), "text": dm_text(event, saved)})
 
     @app.action("approve")
@@ -1465,15 +1486,15 @@ def single_instance() -> bool:
     return bool(handle) and ctypes.get_last_error() != 183  # 183 = ERROR_ALREADY_EXISTS
 
 
-def load_tokens_with_retry(attempts: int = 30, wait_seconds: int = 60) -> bool:
+def load_tokens_with_retry(attempts: int = 30, wait_seconds: int = 60, channel: str = "slack") -> bool:
     """The network may not be up yet at logon, so keep trying for a while before giving up."""
     import token_store
     for attempt in range(1, attempts + 1):
         try:
-            token_store.load_into_env()
+            token_store.load_into_env(channel)
             return True
         except token_store.TokenError as exc:
-            LOG.error("Could not load Slack tokens (attempt %s of %s): %s", attempt, attempts, exc)
+            LOG.error("Could not load %s tokens (attempt %s of %s): %s", channel, attempt, attempts, exc)
             if attempt < attempts:
                 time.sleep(wait_seconds)
     return False
@@ -1500,22 +1521,28 @@ def main(argv: list[str] | None = None) -> int:
         print(bridge.handle_dm("local", next(iter(bridge.allowlist), "local-user") if bridge.allowlist else "local-user", args.once)
               if bridge.allowlist else bridge.runner(f"[Slack DM from Michael]\n{args.once}", cwd=ROOT, dry_run=args.dry_run).text)
         return 0
-    if args.job and not os.environ.get("SLACK_BOT_TOKEN"):
+    if args.job and not (os.environ.get("SLACK_BOT_TOKEN") or os.environ.get("DISCORD_BOT_TOKEN")):
         print(bridge.run_job(args.job) or "(silent)")
         return 0
 
     if not single_instance():
         LOG.info("Another Juno bridge is already running; exiting.")
         return 0
-    if not load_tokens_with_retry():
+    if not load_tokens_with_retry(channel=bridge.channel):
         return 2
     LOG.info("Google read access for the wake gate: %s", "on" if os.environ.get("GOOGLE_REFRESH_TOKEN") else "off")
     if not bridge.allowlist:
-        print("me/notify-allowlist.json has no Slack user id. Add yours before starting the bridge.", file=sys.stderr)
+        print(f"me/notify-allowlist.json has no {bridge.channel} user id. Add yours before starting the bridge.",
+              file=sys.stderr)
         return 2
 
-    from slack_bolt.adapter.socket_mode import SocketModeHandler
-    app = build_app(bridge)
+    if bridge.channel == "discord":
+        import discord_transport
+        rest = discord_transport.Rest(os.environ["DISCORD_BOT_TOKEN"])
+        app = build_app(bridge, discord_transport.App(discord_transport.DiscordClient(
+            rest, discord_transport.Registry(bridge.root / "state" / "discord-ui.json"))))
+    else:
+        app = build_app(bridge)
     if args.job:
         text = bridge.run_job(args.job)
         if text:
@@ -1526,9 +1553,13 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=timers_watcher, args=(app.client, bridge), daemon=True).start()
     threading.Thread(target=hevy_watcher, args=(app.client, bridge), daemon=True).start()
     heartbeat("bridge", True, "started")
-    LOG.info("Juno bridge up; allowlist=%s; v2 key %s", sorted(bridge.allowlist),
+    LOG.info("Juno bridge up on %s; allowlist=%s; v2 key %s", bridge.channel, sorted(bridge.allowlist),
              "loaded" if os.environ.get("JUNO_V2_API_KEY") else "missing (DMs go to v1)")
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    if bridge.channel == "discord":
+        discord_transport.run_gateway(os.environ["DISCORD_BOT_TOKEN"], app, bridge.allowlist)
+    else:
+        from slack_bolt.adapter.socket_mode import SocketModeHandler
+        SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
     return 0
 
 

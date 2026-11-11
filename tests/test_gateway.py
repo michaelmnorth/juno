@@ -143,7 +143,7 @@ def test_token_retry_recovers_after_network_failure(monkeypatch):
     import token_store
     calls = []
 
-    def flaky():
+    def flaky(*_):
         calls.append(1)
         if len(calls) < 3:
             raise token_store.TokenError("offline")

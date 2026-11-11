@@ -30,8 +30,9 @@ SCHEMA = {
 SYSTEM = ("Route one direct message from Michael to his personal assistant. Playbooks: calendar (scheduling, holds, "
           "invites, free time), mail (find, read, draft, send email), people (someone in his life, birthdays, "
           "prep, addresses), notes (reminders, notes, what he said before), general (chat, news, anything else the "
-          "others don't cover), other (training, sleep, money, YouTube, web research: not on this path). "
-          "Use the thread summary to resolve follow-ups like 'move that to 4'.")
+          "others don't cover), other (training, sleep, money accounts and taxes, YouTube, web research). "
+          "A bill, receipt or any question about an email is mail. A follow-up like 'move that to 4', 'remove it' "
+          "or 'send it' keeps the previous playbook and needs tools.")
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,16 @@ class Route:
 FALLBACK = Route("general", "general", (), (), True, "standard")
 
 
-def route(client, message: str, summary: str) -> tuple[Route, lanes.LaneResult | None]:
+def route(client, message: str, summary: str, recent: list[str] | None = None,
+          last_playbook: str = "") -> tuple[Route, lanes.LaneResult | None]:
+    """`recent` is Michael's own last few messages (his words only, never a reply or tool text), and
+    `last_playbook` the previous turn's, so a follow-up keeps its tools."""
+    earlier = "\n".join(f"- {m[:200]}" for m in (recent or [])[-3:]) or "none"
     res = lanes.call(client, model=config.MODELS["router"], effort=config.EFFORT["router"],
                      system=[{"type": "text", "text": SYSTEM}],
-                     messages=[{"role": "user", "content": f"Thread summary: {summary or 'none'}\n\nMessage: {message}"}],
+                     messages=[{"role": "user", "content": (
+                         f"Thread summary: {summary or 'none'}\nHis earlier messages:\n{earlier}\n"
+                         f"Previous playbook: {last_playbook or 'none'}\n\nMessage: {message}")}],
                      schema=SCHEMA, max_tokens=config.MAX_OUTPUT["router"])
     d = res.data
     if not d or d.get("confidence") == "low":

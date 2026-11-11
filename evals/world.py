@@ -11,8 +11,8 @@ EVENTS = [
      "location": "", "attendees": 0, "organizer_self": True},
     {"id": "ev-dentist", "title": "Dentist", "start": "2026-11-13T09:00:00-05:00",
      "end": "2026-11-13T10:00:00-05:00", "location": "", "attendees": 0, "organizer_self": True},
-    {"id": "ev-party", "title": "Launch party", "start": "2026-11-14T19:00:00-05:00",
-     "end": "2026-11-14T22:00:00-05:00", "location": "", "attendees": 30, "organizer_self": False},
+    {"id": "ev-party", "title": "Launch party", "start": "2026-11-13T19:00:00-05:00",
+     "end": "2026-11-13T22:00:00-05:00", "location": "", "attendees": 30, "organizer_self": False},
 ]
 MAIL = {
     "m-jess": {"from": "jess@example.com", "subject": "Dinner Saturday?", "date": "2026-11-11",

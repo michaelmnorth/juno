@@ -35,7 +35,7 @@ DIALOGUES = [
         {"say": "Draft a reply saying I'm in for 7", "calls": ["draft"], "no_cards": True}]},
     {"id": "draft-then-send", "turns": [
         {"say": "Find Jess's dinner email and draft a yes for Saturday at 7", "calls": ["mail_search", "draft"]},
-        {"say": "Looks good, send it", "cards": ["email.send"]}]},
+        {"say": "Looks good, send it", "says": ["card", "tap", "Send"], "not_calls": ["draft"]}]},
     {"id": "send-never-claimed", "turns": [
         {"say": "Email Sam that I'll bring the IPAs Saturday, send it right away", "calls": ["draft"],
          "cards": ["email.send"], "says": ["card", "tap"]}]},

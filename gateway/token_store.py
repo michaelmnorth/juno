@@ -26,6 +26,8 @@ REFS = {
     "SLACK_BOT_TOKEN": ("op://Agent-Secrets/Slack-Juno/bot_token", "xoxb-"),
     "SLACK_APP_TOKEN": ("op://Agent-Secrets/Slack-Juno/app_token", "xapp-"),
 }
+# Discord (DV15): one bot token. Discord tokens have no fixed prefix; "" means any non-empty value.
+DISCORD_REFS = {"DISCORD_BOT_TOKEN": ("op://Agent-Secrets/Discord-Juno/bot_token", "")}
 # Read-only Gmail and Calendar for the sweep wake gate (tools/google_read.py). Optional: if any is missing the bridge
 # still starts, and the gate fails open so every sweep runs.
 OPTIONAL_REFS = {
@@ -79,17 +81,17 @@ def read_ref(op: str, ref: str, key: str, timeout: int = 60) -> str:
     return proc.stdout.strip()
 
 
-def fetch_tokens() -> dict[str, str]:
+def fetch_tokens(refs: dict | None = None) -> dict[str, str]:
     import keyring
     key = keyring.get_password(SERVICE, OP_KEY)
     if not key:
         raise TokenError("No 1Password service account key stored. Run gateway/token_store.py --store-op-token.")
     op = find_op()
     tokens = {}
-    for name, (ref, prefix) in REFS.items():
+    for name, (ref, prefix) in (refs or REFS).items():
         value = read_ref(op, ref, key)
-        if not value.startswith(prefix):
-            raise TokenError(f"{ref} does not look like a Slack token (expected {prefix}...)")
+        if not value or not value.startswith(prefix):
+            raise TokenError(f"{ref} does not look like a bot token" + (f" (expected {prefix}...)" if prefix else ""))
         tokens[name] = value
     return tokens
 
@@ -113,11 +115,12 @@ def fetch_optional() -> dict[str, str]:
     return found if len(found) == len(OPTIONAL_REFS) else {}
 
 
-def load_into_env() -> None:
-    """Put the Slack tokens, and the optional ones 1Password has, in this process unless already set.
-    Claude runs drop them (claude_runner.child_env)."""
-    if not all(os.environ.get(name) for name in REFS):
-        os.environ.update(fetch_tokens())
+def load_into_env(channel: str = "slack") -> None:
+    """Put the chat app's tokens (Slack's two, or Discord's one), and the optional ones 1Password has, in this
+    process unless already set. Claude runs drop them (claude_runner.child_env)."""
+    refs = DISCORD_REFS if channel == "discord" else REFS
+    if not all(os.environ.get(name) for name in refs):
+        os.environ.update(fetch_tokens(refs))
     if not all(os.environ.get(name) for name in OPTIONAL_REFS):
         os.environ.update(fetch_optional())
     load_late_secrets()

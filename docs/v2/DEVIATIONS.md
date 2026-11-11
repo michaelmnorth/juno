@@ -115,3 +115,25 @@ from the ledger rows of v2 runs only. The dialogue set grades the "unsupported" 
 
 The owner chose to be fully on v2 without a side-by-side v1 run, so the v1 baseline is skipped. The gate is the
 dialogue set at 90% or better plus the 7-day cost targets.
+
+## DV15 · Discord as the channel, before P3 (affects the roadmap: P6 "second channel"; owner 2026-11-11)
+
+The owner is moving Juno from Slack to Discord now. The roadmap puts a second channel after P3 and as a real
+adapter interface. This build is the lean version: `gateway/discord_transport.py` gives the bridge a client with
+the Slack WebClient methods it already calls, backed by Discord's REST API, and turns Discord DMs and taps back into
+Slack-shaped events and action bodies. Every card builder and tap handler is shared; Block Kit renders as Discord
+components (v2 layout). What a tap needs after a restart (the card's blocks, each button's value) is kept in
+`state/discord-ui.json`. One bridge runs one channel, chosen in `me/channel.yaml` (`channel: slack|discord`), so
+timers and cards never post twice; rollback is that one line. Michael's Discord user id goes in
+`me/notify-allowlist.json` under `discord`. The bot reads DMs only (no message-content intent); server management
+(channels, topics) is a later step as typed tools behind taps. When P6 comes, the adapter interface replaces the
+Slack-shaped seam.
+
+## DV16 · Dialogue-set fixes after the first real run (P1 gate; 2026-11-11)
+
+First run on real models: 14 of 22 (64%). Causes and changes: the router saw no recent context (the summary only
+covers turns older than the last six), so follow-ups like "move that to 4" lost the calendar tools; it now sees
+Michael's own last messages and the previous playbook. The model told Michael to "use v1" when it lacked a tool; the
+reply schema now has `hand_off`, which hands the message to v1 when nothing was done yet. Identical repeat calls to a
+read-only tool return "already have this". The synthetic launch party clashed with the Saturday-7 dinner dialogue
+and moved to Friday. "Send it" with a card already up is graded on pointing to that card, not on a second card.
