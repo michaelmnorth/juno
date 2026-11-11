@@ -39,6 +39,10 @@ OPTIONAL_REFS = {
 # without it the bridge runs as before and nothing outside notices if it stops.
 HEARTBEAT_REF = ("JUNO_HEARTBEAT_URL", "op://Agent-Secrets/Heartbeat-Juno/url")
 
+# The v2 engine's own Claude API key (decision O1). Optional: without it, chats on v2 get a plain "no key yet" line.
+# Kept under a name the Claude Code CLI never reads, so v1's runs stay on the subscription.
+API_KEY_REF = ("JUNO_V2_API_KEY", "op://Agent-Secrets/Anthropic-Juno/api_key")
+
 
 class TokenError(RuntimeError):
     """Holds a description safe to log. It never contains a secret."""
@@ -125,6 +129,16 @@ def load_into_env() -> None:
         except (TokenError, OSError, ImportError):
             value = ""
         if value.startswith("https://"):
+            os.environ[name] = value
+    name, ref = API_KEY_REF
+    if not os.environ.get(name):
+        try:
+            import keyring
+            key = keyring.get_password(SERVICE, OP_KEY)
+            value = read_ref(find_op(), ref, key) if key else ""
+        except (TokenError, OSError, ImportError):
+            value = ""
+        if value.startswith("sk-ant-"):
             os.environ[name] = value
 
 

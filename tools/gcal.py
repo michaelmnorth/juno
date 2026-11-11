@@ -101,6 +101,7 @@ def _short(event: dict) -> dict:
             "location": event.get("location", ""), "attendees": len(event.get("attendees", [])),
             "busy": event.get("transparency") != "transparent",
             "juno_hold": event.get("extendedProperties", {}).get("private", {}).get("juno") == "hold",
+            "organizer_self": bool(event.get("organizer", {}).get("self", False)),
             "link": event.get("htmlLink", "")}
 
 
