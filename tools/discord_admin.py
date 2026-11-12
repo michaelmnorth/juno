@@ -151,7 +151,28 @@ def run(args, rest=None, root: Path = ROOT) -> dict:
     return out
 
 
+VENV_PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
+
+
+def _in_project_python(argv: list[str]) -> int | None:
+    """Juno's runs call the system Python, which lacks keyring and discord's libraries. Rerun this script in the
+    project's own .venv when that happens; None means we're already where we need to be."""
+    try:
+        import keyring  # noqa: F401
+        return None
+    except ImportError:
+        pass
+    if not VENV_PYTHON.exists() or Path(sys.executable).resolve() == VENV_PYTHON.resolve():
+        return None
+    import subprocess
+    return subprocess.run([str(VENV_PYTHON), str(Path(__file__).resolve()), *argv]).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    rerun = _in_project_python(argv)
+    if rerun is not None:
+        return rerun
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
