@@ -69,6 +69,13 @@ DIALOGUES = [
          "no_cards": True}]},
     {"id": "unsupported", "turns": [
         {"say": "How did I sleep last night?", "handoff": True}]},
+    # P2 (docs/v2/briefs/P2-DO-THINGS.md): what v2 can't open or do goes to v1, never "paste it here".
+    {"id": "review-attachment", "turns": [
+        {"say": "Can you review the write-up I emailed myself this morning? The full breakdown is in the attached "
+                "file. Tell me how you would have handled it.", "handoff": True}]},
+    {"id": "photo-hands-off", "turns": [
+        {"say": "What's wrong with my washer?\n[He attached a photo, saved at state/attachments/1-0.jpg. "
+                "Read it to see it.]", "handoff": True}]},
     {"id": "follow-up-next-day", "next_day": True, "turns": [
         {"say": "Hold Friday 4 to 5 for prep", "calls": ["hold"]},
         {"say": "Remove that hold", "calls": ["undo_hold"], "after_hours": 14}]},

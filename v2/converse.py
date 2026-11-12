@@ -23,6 +23,10 @@ from .store import Store
 # Michael's own words that ask for an email to be written. Without one, no draft is saved, whatever a mail says.
 DRAFT_WORDS = re.compile(r"\b(draft|reply|respond|write|email|e-mail|send|answer|tell|say|let \w+ know|rsvp)\b", re.I)
 
+# The bridge's line for a photo or file he attached and it saved (gateway/slack_bridge.py dm_text). v2 can't see
+# either, so the message goes straight to v1, which opens the saved file (P2 brief, #1 and #8). Code decides, no call.
+ATTACHED = re.compile(r"^\[He attached [^\]\n]{1,160}?, saved at ", re.M)
+
 
 @dataclass
 class Reply:
@@ -66,6 +70,10 @@ class Engine:
         self.store.mark_event(event_id, "running")
         run = None
         try:
+            if ATTACHED.search(text):
+                self.store.mark_event(event_id, "handed_off")
+                self.policy.audit("v2_handoff", {"event": event_id, "why": "attachment"})
+                return Reply("", handoff=True)
             client = self.client_factory()
             thread = self.store.thread(channel, self._now())
             mine = [t["text"] for t in self.store.turns(channel, config.RECENT_TURNS) if t["role"] == "user"]
@@ -86,7 +94,9 @@ class Engine:
             built = assembler.build(ctx, specs, lane=lane)
             res = self._run_lane(client, lane, built, run, specs, wants_draft=bool(DRAFT_WORDS.search(text)))
             self.record(run, lane, route.intent, config.EFFORT["converse"], res, built.block_tokens)
-            if (res.data or {}).get("hand_off") and not (run.touched or run.proposals or run.done):
+            # Reads are safe to repeat, so a run that only looked things up can still hand off (r-674d36975d
+            # searched and read mail, then could not hand off and asked him to paste the file instead).
+            if (res.data or {}).get("hand_off") and not (run.proposals or run.done):
                 self._log_cost(run)
                 self.store.mark_event(event_id, "handed_off")
                 self.policy.audit("v2_handoff", {"run_id": run.run_id, "why": "model", "intent": route.intent})
@@ -101,7 +111,7 @@ class Engine:
             return Reply(reply, run.run_id, round(run.cost, 6))
         except Exception as exc:
             ref = run.run_id if run else f"e{event_id}"
-            acted = bool(run and (run.touched or run.proposals or run.done))
+            acted = bool(run and (run.proposals or run.done))
             self.policy.audit("v2_failed", {"run_id": ref, "error": type(exc).__name__, "detail": str(exc)[:200],
                                             "handoff": not acted})
             if run:
@@ -155,9 +165,18 @@ class Engine:
         by_name = {s.name: s for s in specs}
         seen: dict[str, str] = {}
 
+        def refuse(name: str, reason: str, message: str = "") -> tuple[str, bool]:
+            """Every refused call lands in the audit log (P2: r-674d36975d made one that left no trace)."""
+            known = name in tools.TOOLS
+            self.policy.audit("v2_tool_refused", {"run_id": run.run_id, "tool": name if known else "unknown",
+                                                  **({} if known else {"asked_for": re.sub(r"[^\w.-]", "", str(name))[:40]}),
+                                                  "reason": reason[:120]})
+            return json.dumps({"error": message or reason}), True
+
         def execute(name: str, args: dict) -> tuple[str, bool]:
             if name == "mail_draft" and not wants_draft:  # a draft only when his own words ask for one (DV16)
-                return json.dumps({"error": "Michael didn't ask for a reply or a draft. Don't write one; answer him."}), True
+                return refuse(name, "no draft asked for",
+                              "Michael didn't ask for a reply or a draft. Don't write one; answer him.")
             key = name + json.dumps(args, sort_keys=True)
             if key in seen and by_name.get(name) and by_name[name].tier == tools.Tier.T0:
                 return json.dumps({"same_as_before": True, "note": "You already have this result. Don't call it "
@@ -165,14 +184,16 @@ class Engine:
             spec = by_name.get(name)
             d = self.policy.decide(run, spec, args)
             if d.verdict == "deny":
-                return json.dumps({"error": d.reason}), True
+                return refuse(name, d.reason)
             if d.verdict == "ask":
                 if not spec.propose:
-                    return json.dumps({"error": "needs Michael; ask him in your reply"}), True
+                    return refuse(name, "needs a tap and has no card", "needs Michael; ask him in your reply")
                 try:
                     entry = self.policy.propose(run, spec, spec.propose(self.backend, args), d.reason)
                 except Exception as exc:
-                    return json.dumps({"error": f"couldn't prepare the card: {type(exc).__name__}"}), True
+                    return refuse(name, f"card not prepared: {type(exc).__name__}",
+                                  f"couldn't prepare the card: {type(exc).__name__}. Nothing was sent or changed; "
+                                  "don't describe this as something you did.")
                 return json.dumps({"card_up": True, "summary": entry["summary"],
                                    "note": "Michael approves or skips with a tap; nothing has happened yet"}), False
             try:

@@ -153,6 +153,11 @@ def h_mail_read(b, a, ctx):
     fields["from"] = msg.get("from", "")
     fields["trust"] = b.trust(msg.get("from", ""))
     gist = fields.pop("gist", "")
+    if msg.get("attachments"):  # types and sizes only, from code: a file name is the sender's text
+        fields["attachments"] = [{"type": str(x.get("type", ""))[:60], "kb": int(x.get("kb", 0))}
+                                 for x in msg["attachments"][:10]]
+        fields["attachments_note"] = ("You can't open attachments. If he wants one read or reviewed, set hand_off: "
+                                      "the full assistant can open it.")
     if a.get("include_gist"):
         fields["gist"] = gist  # free text: taints the run
     return ToolResult(fields, untrusted_text=bool(a.get("include_gist")),

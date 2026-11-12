@@ -32,6 +32,18 @@ def _lines(path: Path, limit: int = 60) -> list[str]:
     return [l.strip() for l in text.splitlines() if l.strip() and not l.startswith("#")][:limit]
 
 
+def attachment_parts(payload: dict) -> list[dict]:
+    """Attached files in a Gmail payload: mime type and size only (the name is the sender's text)."""
+    out, stack = [], [payload]
+    while stack:
+        part = stack.pop()
+        stack.extend(part.get("parts") or [])
+        body = part.get("body") or {}
+        if part.get("filename") and body.get("attachmentId"):
+            out.append({"type": part.get("mimeType", ""), "kb": round((body.get("size") or 0) / 1024)})
+    return out
+
+
 def _undated(line: str) -> str:
     return re.sub(r"^- \d{4}-\d{2}-\d{2}: ", "- ", line)
 
@@ -92,7 +104,7 @@ class RealBackend:
         h = {x["name"].lower(): x["value"] for x in payload.get("headers", [])}
         addr = next((a for _, a in getaddresses([h.get("from", "")]) if a), "")
         return {"from": addr.lower(), "subject": h.get("subject", ""), "date": h.get("date", ""),
-                "text": inbox.body_text(payload)[:12000]}
+                "text": inbox.body_text(payload)[:12000], "attachments": attachment_parts(payload)}
 
     def trust(self, address: str) -> str:
         import trust
