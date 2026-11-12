@@ -148,3 +148,8 @@ delete command, and the bot holds Manage Channels only: no Administrator, roles,
 follow `discord.channel` in `me/automation.yaml` (auto_notify: done, then told), and every one lands in
 `state/audit.jsonl`. v1 runs it; v2's router sends server requests to v1. Text in server channels is never read
 as instructions (the bot reads DMs only).
+
+Changed the same day (owner): the bot holds Administrator on Michael's server, his explicit choice after the
+risk was stated (a leaked token could do anything there). What Juno can do is still only what
+`tools/discord_admin.py` offers: channels and categories, plus the server's name, icon and banner. Still no delete,
+no roles, members, bans or messages; adding any of those is a code change, not a permission change.

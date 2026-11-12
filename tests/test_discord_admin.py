@@ -20,6 +20,8 @@ class FakeRest:
         self.calls.append((method, path, body))
         if path == "/users/@me/guilds":
             return [{"id": "g1", "name": "Michael's server"}]
+        if path == "/guilds/g1":
+            return {"name": body["name"]} if body and "name" in body else {"name": "Michael's server", "premium_tier": 0}
         if method == "GET":
             return self.chans
         if method == "POST":
@@ -77,3 +79,19 @@ def test_bad_names_and_ambiguity_are_refused(tmp_path, monkeypatch):
     with pytest.raises(da.AdminError) as exc:
         da.run(NS(cmd="rename", channel="general", to="x"), rest, root)
     assert "use the id" in str(exc.value)
+
+
+def test_server_name_and_icon_from_a_project_file_only(tmp_path, monkeypatch):
+    monkeypatch.delenv("JUNO_DISCORD_GUILD", raising=False)
+    root, rest = root_with(tmp_path, "auto_notify"), FakeRest()
+    (root / "state").mkdir()
+    (root / "state" / "icon.png").write_bytes(b"PNG fake")
+    out = da.run(NS(cmd="server", name="The Lab", icon="state/icon.png", banner=None), rest, root)
+    method, path, body = rest.calls[-1]
+    assert (method, path) == ("PATCH", "/guilds/g1") and body["name"] == "The Lab"
+    assert body["icon"].startswith("data:image/png;base64,") and out["was"] == "Michael's server"
+    outside = tmp_path.parent / "elsewhere.png"
+    outside.write_bytes(b"x")
+    with pytest.raises(da.AdminError):
+        da.run(NS(cmd="server", name=None, icon=str(outside), banner=None), rest, root)
+    assert da.run(NS(cmd="list"), rest, root)["server"]["boost_level"] == 0

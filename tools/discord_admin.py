@@ -9,6 +9,10 @@
   python tools/discord_admin.py archive --channel NAME_OR_ID
       Moves the channel into an "Archive" category (made if missing). Nothing is ever deleted: there is no delete
       command, and the bot has no permission to manage roles, members, bans or messages.
+  python tools/discord_admin.py server [--name NAME] [--icon FILE] [--banner FILE]
+      The server's name, icon and banner (Manage Server). FILE is a PNG, JPG or GIF inside this project folder (a
+      photo Michael sent lands in state/attachments/). A banner needs the server at Boost level 2; Discord says so
+      if not.
 
 Writes run while me/automation.yaml has discord.channel as auto or auto_notify (Juno then tells Michael in plain
 words); on ask they refuse with exit 4 and the coordinator asks him first. Every write goes to state/audit.jsonl.
@@ -112,16 +116,53 @@ def _category(rest, gid: str, chans: list[dict], name: str, make: bool = False) 
     return made["id"]
 
 
+IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif"}
+IMAGE_MAX = 8 * 1024 * 1024
+
+
+def _image(path: str, root: Path) -> str:
+    """A local image as the data URI Discord wants. Only files inside the project folder."""
+    import base64
+    f = Path(path) if Path(path).is_absolute() else root / path
+    f = f.resolve()
+    if root.resolve() not in f.parents or not f.is_file():
+        raise AdminError(5, "the image must be a file inside the project folder")
+    mime = IMAGE_MIME.get(f.suffix.lower())
+    if not mime or f.stat().st_size > IMAGE_MAX:
+        raise AdminError(5, "the image must be a PNG, JPG or GIF under 8 MB")
+    return f"data:{mime};base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+
+
 def run(args, rest=None, root: Path = ROOT) -> dict:
     rest = rest or _rest()
     gid = guild_id(rest)
-    chans = channels(rest, gid)
     if args.cmd == "list":
-        return {"channels": chans}
+        g = rest("GET", f"/guilds/{gid}")
+        return {"server": {"name": g.get("name"), "boost_level": g.get("premium_tier", 0),
+                           "has_icon": bool(g.get("icon")), "has_banner": bool(g.get("banner"))},
+                "channels": channels(rest, gid)}
+    chans = channels(rest, gid) if args.cmd != "server" else []
     mode = _mode(root)
     if mode not in ("auto", "auto_notify"):
         raise AdminError(4, f"discord.channel is '{mode}': ask Michael first")
-    reason = "Juno"  # shows in the server's audit log
+    if args.cmd == "server":
+        body = {}
+        if args.name:
+            if not NAME_OK.match(args.name.strip()) or len(args.name.strip()) < 2:
+                raise AdminError(5, "a server name is 2 to 100 characters with no @, #, : or `")
+            body["name"] = args.name.strip()
+        if args.icon:
+            body["icon"] = _image(args.icon, root)
+        if args.banner:
+            body["banner"] = _image(args.banner, root)
+        if not body:
+            raise AdminError(5, "say what to change: --name, --icon or --banner")
+        was = rest("GET", f"/guilds/{gid}").get("name", "")
+        got = rest("PATCH", f"/guilds/{gid}", body)
+        out = {"done": "server updated", "id": gid, "name": got.get("name", body.get("name", was)), "was": was,
+               "changed": sorted(body)}
+        _audit(root, "server", {k: v for k, v in out.items() if k != "done"})
+        return out
     if args.cmd == "create":
         body = {"name": _name(args.name, args.kind), "type": KINDS[args.kind]}
         if args.category and args.kind != "category":
@@ -186,6 +227,10 @@ def main(argv: list[str] | None = None) -> int:
         s.add_argument("--channel", required=True)
         for flag in extra:
             s.add_argument(flag, required=True)
+    sv = sub.add_parser("server")
+    sv.add_argument("--name")
+    sv.add_argument("--icon")
+    sv.add_argument("--banner")
     args = p.parse_args(argv)
     try:
         out = run(args)

@@ -14,5 +14,5 @@ actions:
   hevy.routine.create:    {mode: ask,   clean_approvals: 0}
   memory.observe:         {mode: auto,  note: "Michael 2026-11-07: Juno keeps observed/ silently and reports changes in the brief and check-in"}
   memory.write:           {mode: ask,   note: "me/, learnings/, people/, CONTEXT.md; never auto when unattended"}
-  discord.channel:        {mode: auto_notify, note: "Michael 2026-11-11: full control of channels on his Discord server (create, rename, topic, move, archive) with tools/discord_admin.py; Juno says what she changed. No delete exists; archive moves a channel into Archive."}
+  discord.channel:        {mode: auto_notify, note: "Michael 2026-11-11: full control of his Discord server: channels (create, rename, topic, move, archive) and the server name, icon and banner with tools/discord_admin.py; Juno says what she changed. No delete exists; archive moves a channel into Archive."}
   money.any:              {mode: never, note: "No tool exists. Do not create one."}
