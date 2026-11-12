@@ -76,6 +76,9 @@ DIALOGUES = [
     {"id": "photo-hands-off", "turns": [
         {"say": "What's wrong with my washer?\n[He attached a photo, saved at state/attachments/1-0.jpg. "
                 "Read it to see it.]", "handoff": True}]},
+    {"id": "research-with-sources", "turns": [
+        {"say": "Look into what an E6 error code means on a front-load washer and how people fix it",
+         "no_cards": True, "says": ["drain", "pump", "filter", "hose"]}]},
     {"id": "follow-up-next-day", "next_day": True, "turns": [
         {"say": "Hold Friday 4 to 5 for prep", "calls": ["hold"]},
         {"say": "Remove that hold", "calls": ["undo_hold"], "after_hours": 14}]},

@@ -313,6 +313,7 @@ PLAYBOOK_TOOLS = {
     "mail": ["contact_email", "mail_draft", "mail_read", "mail_search", "mail_send", "people_lookup"],
     "people": ["calendar_events", "contact_email", "note_add", "notes_search", "people_lookup"],
     "notes": ["note_add", "notes_search", "reminder_add", "reminders_list"],
+    "research": ["note_add", "notes_search"],  # plus the server-side web tools (config.RESEARCH_SERVER_TOOLS)
     "general": ["calendar_events", "note_add", "notes_search", "people_lookup", "reminder_add", "reminders_list"],
 }
 

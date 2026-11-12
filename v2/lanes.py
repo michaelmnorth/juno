@@ -77,6 +77,7 @@ class CallRecord:
     latency_ms: int
     stop_reason: str
     served_by: str = ""
+    searches: int = 0       # server-side web searches in this call, billed per search
 
 
 @dataclass
@@ -101,10 +102,38 @@ def _create(client, req: dict):
 
 
 def _record(model: str, resp, started: float) -> CallRecord:
-    n = usage_numbers(getattr(resp, "usage", None))
+    usage = getattr(resp, "usage", None)
+    n = usage_numbers(usage)
     served = getattr(resp, "model", model) or model
-    return CallRecord(model, n, cost(served, n), int((time.monotonic() - started) * 1000),
-                      str(getattr(resp, "stop_reason", "") or ""), served)
+    searches = _u(getattr(usage, "server_tool_use", None), "web_search_requests")
+    return CallRecord(model, n, round(cost(served, n) + searches * config.WEB_SEARCH_USD, 6),
+                      int((time.monotonic() - started) * 1000), str(getattr(resp, "stop_reason", "") or ""), served,
+                      searches)
+
+
+WEB_RESULTS = ("web_search_tool_result", "web_fetch_tool_result")
+HAND_OFF_MARK = "HAND_OFF"
+
+
+def plain_reply(resp) -> dict:
+    """A plain-text answer (the research lane: web search citations rule out structured outputs) in the reply
+    shape. Sources come from the citations, collected by code, never from the model's text. A reply that starts with
+    HAND_OFF hands the message to v1."""
+    texts, urls = [], []
+    for block in getattr(resp, "content", []) or []:
+        if getattr(block, "type", "") != "text":
+            continue
+        texts.append(block.text or "")
+        for c in getattr(block, "citations", None) or []:
+            url = getattr(c, "url", "") or (c.get("url", "") if isinstance(c, dict) else "")
+            if url.startswith("https://") and url not in urls:
+                urls.append(url)
+    body = "".join(texts).strip()
+    if body.startswith(HAND_OFF_MARK):
+        return {"reaction": "", "reply": "", "hand_off": True}
+    if urls:
+        body += "\n\nSources: " + "  ".join(urls[:4])
+    return {"reaction": "mag", "reply": body, "hand_off": False}
 
 
 def _json_text(resp) -> dict | None:
@@ -133,7 +162,7 @@ def call(client, *, model: str, effort: str, system: list[dict], messages: list[
 
 
 def loop(client, *, model: str, effort: str, system: list[dict], messages: list[dict], tools: list[dict],
-         run, execute, max_tokens: int) -> LaneResult:
+         run, execute, max_tokens: int, schema: dict | None = REPLY_SCHEMA) -> LaneResult:
     """L2: a bounded tool loop. `execute(name, input) -> (content_str, is_error)` runs each call through the policy
     engine. The control plane stops the loop on the run's call or dollar budget, before the next request."""
     records: list[CallRecord] = []
@@ -142,15 +171,18 @@ def loop(client, *, model: str, effort: str, system: list[dict], messages: list[
         over = run.over_budget()
         if over:
             return LaneResult(None, "", "budget", records, stopped=over)
+        out_cfg = {"effort": effort, **({"format": {"type": "json_schema", "schema": schema}} if schema else {})}
         req = {"model": model, "max_tokens": max_tokens, "system": system, "messages": msgs, "tools": tools,
                "cache_control": {"type": "ephemeral"},  # the growing tail, so later calls read the first from cache
-               "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": REPLY_SCHEMA}}}
+               "output_config": out_cfg}
         started = time.monotonic()
         resp = _create(client, req)
         rec = _record(model, resp, started)
         records.append(rec)
         run.calls += 1
         run.cost += rec.cost
+        if any(getattr(b, "type", "") in WEB_RESULTS for b in getattr(resp, "content", []) or []):
+            run.tainted = True  # a web page or search result is outside text, like mail
         if rec.stop_reason == "refusal":
             return LaneResult(None, "", "refusal", records, stopped="refusal")
         if rec.stop_reason == "max_tokens":
@@ -160,7 +192,7 @@ def loop(client, *, model: str, effort: str, system: list[dict], messages: list[
             continue
         uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
         if rec.stop_reason != "tool_use" or not uses:
-            return LaneResult(_json_text(resp), "", rec.stop_reason, records)
+            return LaneResult(_json_text(resp) if schema else plain_reply(resp), "", rec.stop_reason, records)
         msgs.append({"role": "assistant", "content": resp.content})  # thinking blocks go back unchanged
         results = []
         for block in uses:
@@ -222,7 +254,7 @@ def ledger_rows(run, lane: str, intent: str, effort: str, res: LaneResult, block
         rows.append({"run_id": run.run_id, "call_idx": i, "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                      "lane": lane, "run_class": run.run_class, "intent": intent, "model": rec.served_by or rec.model,
                      "effort": effort, **{f"tok_{k}": v for k, v in block_tokens.items()},
-                     "tok_tool_results": tool_result_tokens if i else 0, **rec.numbers, "searches": 0,
+                     "tok_tool_results": tool_result_tokens if i else 0, **rec.numbers, "searches": rec.searches,
                      "cost_usd": rec.cost, "latency_ms": rec.latency_ms, "stop_reason": rec.stop_reason,
                      "tainted": int(run.tainted)})
     return rows

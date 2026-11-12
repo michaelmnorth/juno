@@ -276,3 +276,62 @@ def test_sweep_and_brief_use_followups_and_home_domain_is_routed():
     assert "domains/home/private/appliances.md" in claude and "followups.py add" in claude
     example = (ROOT / "domains" / "home" / "CONTEXT.example.md").read_text(encoding="utf-8")
     assert "private/appliances.md" in example
+
+
+# --- 5. research playbook with server-side web tools ---------------------------------------------------------------
+
+def _research_answer(text_="The E6 code is usually the drain pump.", url="https://www.lg.example/support/e6",
+                     searches=2):
+    from types import SimpleNamespace as NS
+    from test_v2 import usage
+    u = usage()
+    u.server_tool_use = NS(web_search_requests=searches, web_fetch_requests=1)
+    return NS(content=[NS(type="server_tool_use", id="srv1", name="web_search", input={"query": "e6"}),
+                       NS(type="web_search_tool_result", tool_use_id="srv1", content=[]),
+                       NS(type="text", text=text_, citations=[NS(type="web_search_result_location", url=url,
+                                                                  title="t", cited_text="x")])],
+              stop_reason="end_turn", usage=u, model=config.SONNET)
+
+
+def test_research_runs_with_server_tools_and_no_json_format(env):
+    e = env.make([route_resp("research"), _research_answer()])
+    reply = e.handle("C1", "look into what an E6 error on my washer means", "C1:40")
+    req = env.holder["client"].requests[-1]
+    types_ = [t.get("type") for t in req["tools"]]
+    assert "web_search_20260318" in types_ and "web_fetch_20260318" in types_
+    search = next(t for t in req["tools"] if t.get("name") == "web_search")
+    assert search["max_uses"] == 3
+    assert "format" not in req["output_config"]  # citations and structured outputs don't mix
+    assert "drain pump" in reply.text and "Sources: https://www.lg.example/support/e6" in reply.text
+    assert e.store.thread("C1")["tainted"]  # a web result is outside text
+
+
+def test_research_search_cost_is_counted_in_the_ledger(env):
+    e = env.make([route_resp("research"), _research_answer(searches=3)])
+    reply = e.handle("C1", "research E6", "C1:41")
+    rows = e.store.ledger_rows(reply.run_id)
+    converse = [r for r in rows if r["run_class"] == "converse"]
+    assert converse[0]["searches"] == 3
+    assert reply.cost >= 0.03  # three searches at $0.01 plus tokens
+
+
+def test_research_can_hand_off_and_other_playbooks_keep_json(env):
+    e = env.make([route_resp("research"), _research_answer(text_="HAND_OFF")])
+    assert e.handle("C1", "research and fill in the claim form", "C1:42").handoff
+    e2 = env.make([route_resp("notes"), final("ok")])
+    e2.handle("C1", "what's on my list", "C1:43")
+    req = env.holder["client"].requests[-1]
+    assert req["output_config"]["format"]["type"] == "json_schema"
+    assert not any(str(t.get("type", "")).startswith("web_") for t in req.get("tools", []))
+
+
+def test_citation_links_come_from_code_and_only_https(env):
+    from v2 import lanes
+    resp = _research_answer(url="javascript:alert(1)")
+    assert "Sources" not in lanes.plain_reply(resp)["reply"]
+
+
+def test_router_knows_research():
+    from v2 import router
+    assert "research" in router.PLAYBOOKS and "research (look into" in router.SYSTEM
+    assert (ROOT / "v2" / "playbooks" / "research" / "SKILL.md").exists()

@@ -53,3 +53,14 @@ MAX_OUTPUT = {"router": 512, "reader": 1024, "converse": 4096}
 THREAD_IDLE_HOURS = 24  # a quiet thread closes: its taint clears; summary and working set carry over
 DEFAULT_ENGINE = "v2"  # every new chat; "use v1" pins one chat to the old engine (DV13)
 RECENT_TURNS = 6
+
+# The research playbook's server-side web tools (P2 brief, #3). Versions, prices and limits checked against the live
+# docs on 2026-11-12: web search is $10 per 1,000 searches plus tokens, web fetch is tokens only. Both run dynamic
+# filtering on Sonnet 5.5 (code execution provisioned by the API, no extra charge). Web search always returns
+# citations, which structured outputs reject, so the research lane answers in plain text (DV19).
+WEB_SEARCH_USD = 0.01
+RESEARCH_SERVER_TOOLS = [
+    {"type": "web_search_20260318", "name": "web_search", "max_uses": 3,
+     "user_location": {"type": "approximate", "region": "Georgia", "country": "US", "timezone": "America/New_York"}},
+    {"type": "web_fetch_20260318", "name": "web_fetch", "max_uses": 3, "max_content_tokens": 6000},
+]

@@ -2,7 +2,7 @@
 
 The bridge calls Engine.handle() for every DM (v2 is the default engine, DV13). Every turn is a fresh request built
 from the store: no transcript replay. Three cases hand the message to v1 instead (Reply.handoff): a request the
-router sends to "other" (health, money, YouTube, research: not ported), no API key yet, or a failure before the run
+router sends to "other" (health, money, YouTube, files, forms: not ported), no API key yet, or a failure before the run
 did anything. A failure after the run acted is never handed off: the owner hears it with the run ID, so nothing
 is done twice.
 """
@@ -92,7 +92,11 @@ class Engine:
                             run_class="router")
             ctx = self._context(text, route, thread, run)
             built = assembler.build(ctx, specs, lane=lane)
-            res = self._run_lane(client, lane, built, run, specs, wants_draft=bool(DRAFT_WORDS.search(text)))
+            research = lane == "l2" and route.playbook == "research"
+            if research:  # server-side web tools: after the client tools, so their order stays byte-stable
+                built.tools = built.tools + [dict(t) for t in config.RESEARCH_SERVER_TOOLS]
+            res = self._run_lane(client, lane, built, run, specs, wants_draft=bool(DRAFT_WORDS.search(text)),
+                                 schema=None if research else lanes.REPLY_SCHEMA)
             self.record(run, lane, route.intent, config.EFFORT["converse"], res, built.block_tokens)
             # Reads are safe to repeat, so a run that only looked things up can still hand off (r-674d36975d
             # searched and read mail, then could not hand off and asked him to paste the file instead).
@@ -153,7 +157,8 @@ class Engine:
             summary=thread["summary"], working_set=thread["working_set"], turns=recent, tainted=run.tainted,
             quiet_hours=b.quiet_hours(), budget_left=run.budget.dollars - run.cost)
 
-    def _run_lane(self, client, lane: str, built, run, specs, wants_draft: bool = True) -> lanes.LaneResult:
+    def _run_lane(self, client, lane: str, built, run, specs, wants_draft: bool = True,
+                  schema: dict | None = lanes.REPLY_SCHEMA) -> lanes.LaneResult:
         if lane == "l1":
             res = lanes.call(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
                              system=built.system, messages=built.messages, schema=lanes.REPLY_SCHEMA,
@@ -210,7 +215,7 @@ class Engine:
 
         return lanes.loop(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
                           system=built.system, messages=built.messages, tools=built.tools, run=run, execute=execute,
-                          max_tokens=config.MAX_OUTPUT["converse"])
+                          max_tokens=config.MAX_OUTPUT["converse"], schema=schema)
 
     def _reply_text(self, res: lanes.LaneResult, run) -> str:
         cards = [p["summary"] for p in run.proposals]

@@ -157,3 +157,22 @@ no roles, members, bans or messages; adding any of those is a code change, not a
 ## DV18 · Juno answers Michael's @mentions in server channels (owner 2026-11-11)
 
 On Discord, a message from Michael that @mentions Juno in a server channel is handled like a DM, with its own thread and session per channel. The bot reads only those: other members' and bots' messages never reach it (Discord sends message text to a bot without the message-content intent only for DMs and mentions). The prompt tells Juno the channel is readable by others: no mail, calendar detail, health, money or people in the reply; offer the DM instead. Cards and approvals stay in DMs. Michael does not want his briefs or other output posted to channels.
+
+## DV19 · v2 research lane answers in plain text, not the JSON reply schema (P2 brief #3; 2026-11-12)
+
+The P1 lanes give every converse call structured output (`output_config.format`, the reply schema). The live docs
+(checked 2026-11-12) say web search always returns citations and structured outputs reject citations with a 400. So
+the new `research` playbook runs the same bounded loop without the format: the model writes plain text, code wraps
+it in the reply shape (`lanes.plain_reply`), adds up to four source links taken from the citation blocks (https
+only), and treats a reply that starts with `HAND_OFF` as `hand_off`. Tools: `web_search_20260318` (`max_uses` 3,
+Georgia location) and `web_fetch_20260318` (`max_uses` 3, `max_content_tokens` 6000), after the playbook's client
+tools so the cached tool prefix keeps its order. Any web result taints the run. Searches are billed at $0.01 each
+from `usage.server_tool_use.web_search_requests` and land in the ledger's `searches` column. Rollback: drop
+"research" from `router.PLAYBOOKS` and research goes back to v1.
+
+## DV20 · Reads no longer block a v2 handoff (P2 brief, step 1; 2026-11-12)
+
+DV13 says a run hands off only if it has not "touched, proposed or done" anything. Run r-674d36975d searched and read
+mail (which fills `touched`), so its handoff was refused and it asked Michael to paste the file instead. Reads are
+T0 and safe to repeat, so the handoff test is now "nothing proposed or done". A DM with a saved photo or file goes
+to v1 in code before the router (`converse.ATTACHED`): v2 cannot see either.
