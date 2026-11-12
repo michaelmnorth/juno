@@ -176,3 +176,17 @@ DV13 says a run hands off only if it has not "touched, proposed or done" anythin
 mail (which fills `touched`), so its handoff was refused and it asked Michael to paste the file instead. Reads are
 T0 and safe to repeat, so the handoff test is now "nothing proposed or done". A DM with a saved photo or file goes
 to v1 in code before the router (`converse.ATTACHED`): v2 cannot see either.
+
+## DV21 · The browser agent is a bridge-run CLI agent, not a Task subagent (P2 brief, step 7; 2026-11-12)
+
+The brief asks for a browser subagent with `@playwright/mcp` loaded only for that agent through `--mcp-config`. A
+Task subagent shares the coordinator's process, MCP servers and context (mail, memory), and a page is untrusted
+input, so the agent runs as its own `claude -p` started by the bridge (`gateway/browser_agent.py`): `--tools ""`,
+`--mcp-config` for this run plus `--strict-mcp-config`, `--setting-sources user` (no CLAUDE.md, memory or
+connectors), and `--settings` with the gate hook (`.claude/hooks/gate_browser.py`; checked 2026-11-12 that hooks from
+`--settings` load under `--setting-sources user`). The persona lives in `gateway/agents/browser.md`, outside
+`.claude/agents/`, so the coordinator can't call it through the Agent tool. The coordinator queues requests with
+`tools/browser_queue.py`. Playwright's own config turns off page-registered tools (`webmcp: false`), uses its
+bundled Chromium (never Michael's Chrome), headless, in `state/browser/profile`. `--allowed-origins` "is not a security
+boundary" per its README, so the hook checks every navigation itself. Michael's answers: every submit gets a card
+("Always a card"); always headless. Rollback: remove the `browser_watcher` thread; queued requests just wait.

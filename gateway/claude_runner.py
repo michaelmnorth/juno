@@ -149,15 +149,24 @@ def run(prompt: str, *, cwd: Path = ROOT, resume: str | None = None, unattended:
         permission_mode: str | None = None, model: str | None = None, max_budget_usd: float | None = None,
         max_turns: int | None = None, timeout: int = 900, dry_run: bool = False, claude_bin: str | None = None,
         allowed_tools: tuple[str, ...] = (), env_extra: dict | None = None, job: str = "other",
-        lean_system: str | None = None, effort: str | None = None) -> RunResult:
-    """lean_system set: a lean words-only call with that system prompt (see LEAN_FLAGS)."""
+        lean_system: str | None = None, effort: str | None = None, mcp_config: Path | None = None,
+        settings_file: Path | None = None) -> RunResult:
+    """lean_system set: a lean words-only call with that system prompt (see LEAN_FLAGS).
+    mcp_config set (with lean_system): an agent run whose only tools are that MCP server's `allowed_tools`, with
+    no built-in tools, no other MCP server, no project CLAUDE.md or settings, and `settings_file` for its hooks
+    (the browser agent, gateway/browser_agent.py)."""
     permission_mode = permission_mode or os.environ.get("CLAUDE_PERMISSION_MODE", "acceptEdits")
     model = model or os.environ.get("CLAUDE_MODEL") or None
     binary = claude_bin or ("claude" if dry_run else find_claude())
     # allowed_tools grants tools outside the settings allow list to this one run only (an approved action).
     prompt = f"{now_line()}\n{prompt}"
     extra = (("--allowedTools", ",".join(allowed_tools)) if allowed_tools else ()) + tool_flags()
-    if lean_system is not None:
+    if lean_system is not None and mcp_config is not None:
+        if not allowed_tools or settings_file is None:
+            raise ValueError("an MCP agent run needs its allowed tools and its settings file (the gate hook)")
+        extra = ("--system-prompt", lean_system, *LEAN_FLAGS, "--mcp-config", str(mcp_config), "--settings",
+                 str(settings_file), "--allowedTools", ",".join(allowed_tools))
+    elif lean_system is not None:
         extra = ("--system-prompt", lean_system, *LEAN_FLAGS)
         max_turns = max_turns or 1
     cmd = build_command(binary, prompt, resume=resume, permission_mode=permission_mode, model=model,

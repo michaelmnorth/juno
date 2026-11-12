@@ -33,6 +33,8 @@ EXECUTABLE = {
     "calendar.event.update": (),
     # Installs run in Python (gateway/installer.py), not through a granted tool; the resumed run only reports.
     "subagent.install": (),
+    # Form submits run in the bridge's own browser run with a one-time pass (gateway/browser_agent.py); never auto.
+    "web.form.submit": (),
 }
 # "Always allow" is offered only where a standing rule stays narrow: holds on his own calendar, and sends to the
 # exact same recipients. Never for installs, money, or events that invite people.
@@ -167,13 +169,16 @@ YES = {
     "calendar.event.update": ("Yes, move it", [("Other time", "othertime")]),
     "calendar.hold": ("Yes, add it", [("Always add holds", "always"), ("Other time", "othertime")]),
     "subagent.install": ("Yes, install", [("Show files", "showfiles")]),
+    "web.form.submit": ("Yes, submit", []),
 }
 CHANGES = {
     "calendar.event.create": "Adds an event to your calendar and emails the invite",
     "calendar.event.update": "Moves the event; everyone invited is told",
     "calendar.hold": "Adds a hold to your calendar only. No one is told",
     "subagent.install": "Installs a new agent into .claude/agents",
+    "web.form.submit": "Submits this form in Juno's own browser. A sent form can't be taken back",
 }
+FIELDS_MAX = 1900  # one Slack field holds 2000 characters
 
 
 def _people_relationship(addr: str, root: Path) -> str | None:
@@ -219,6 +224,12 @@ def who_line(addr: str, root: Path, history=_mail_history) -> str:
         return "1st email from them"
     count, replied = seen
     return f"{_ordinal(count)} email" + (", you've replied before" if replied else ", no reply yet")
+
+
+def _plain(value) -> str:
+    """Text a web page had a hand in (form labels, the button): Slack's escapes, so it can't become a link or a
+    mention on the card."""
+    return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _field(label: str, value: str) -> dict:
@@ -298,6 +309,12 @@ def blocks(entry: dict, trust_label: str | None = None, root: Path | None = None
         return out
 
     facts = [_field("What", entry.get("action", ""))]
+    if cls == "web.form.submit":
+        facts.append(_field("Site", f"{_plain(entry.get('site'))}\n{_plain(entry.get('url'))}"))
+        values = "\n".join(f"{_plain(f.get('label'))}: {_plain(f.get('value'))}"
+                           for f in entry.get("fields") or []) or "(none)"
+        facts.append(_field("Values", values[:FIELDS_MAX]))
+        facts.append(_field("Button", _plain(entry.get("submit_label"))))
     if cls.startswith("calendar."):
         facts.append(_field("Invites", "\n".join(f"{a} ({who_line(a, root)})" for a in who) or "No one"))
     if cls in CHANGES:

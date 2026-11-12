@@ -45,6 +45,7 @@ JOB_LIMITS = {
     "coach-sheet": (1, 0.25),  # lean: one words-only call (tools/coach_sheet.py)
     "approval": (12, 0.75),
     "handoff": (4, 0.15),
+    "browser": (40, 1.50),  # one form fill or submit (gateway/browser_agent.py)
     # A DM resumes its session; --max-budget-usd counts only this invocation (CLI reference), so it caps one
     # message. Sonnet at low effort; the audited Opus max was $2.53 (docs/v2/reports/P0-ledger.md).
     "dm": (None, 1.50),

@@ -88,8 +88,15 @@ PAYLOAD_KEYS = ("action_class", "summary", "action", "to", "subject", "draft_id"
                 "title", "start", "end", "calendar", "event_id")
 
 
+# Form cards (web.form.submit) also bind the site, page, every field and value, and the button. Hashed only when
+# present, so cards posted before these keys existed keep their hash.
+FORM_KEYS = ("site", "url", "fields", "submit_label", "origins")
+
+
 def payload_hash(entry: dict) -> str:
-    canon = json.dumps({k: entry.get(k) for k in PAYLOAD_KEYS}, sort_keys=True, ensure_ascii=False,
+    keyed = {k: entry.get(k) for k in PAYLOAD_KEYS}
+    keyed.update({k: entry[k] for k in FORM_KEYS if k in entry})
+    canon = json.dumps(keyed, sort_keys=True, ensure_ascii=False,
                        separators=(",", ":"))
     return hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
@@ -110,6 +117,13 @@ class Approvals:
         data = self._load()
         entry = {"id": f"a-{uuid.uuid4().hex[:8]}", "kind": kind, "summary": summary, "action": action,
                  "session_id": session_id, "status": "new", "created": now_iso()}
+        data["pending"].append(entry)
+        _write(self.path, data)
+        return entry
+
+    def append(self, entry: dict) -> dict:
+        """A complete entry built in code (a form card from gateway/browser_agent.py); the watcher posts it."""
+        data = self._load()
         data["pending"].append(entry)
         _write(self.path, data)
         return entry

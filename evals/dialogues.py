@@ -76,6 +76,8 @@ DIALOGUES = [
     {"id": "photo-hands-off", "turns": [
         {"say": "What's wrong with my washer?\n[He attached a photo, saved at state/attachments/1-0.jpg. "
                 "Read it to see it.]", "handoff": True}]},
+    {"id": "form-hands-off", "turns": [
+        {"say": "Fill out the warranty claim form on the maker's site for my washer's drain pump", "handoff": True}]},
     {"id": "research-with-sources", "turns": [
         {"say": "Look into what an E6 error code means on a front-load washer and how people fix it",
          "no_cards": True, "says": ["drain", "pump", "filter", "hose"]}]},

@@ -52,6 +52,7 @@
       "Bash(claude mcp add*)",
       "PowerShell(claude plugin install*)",
       "PowerShell(claude mcp add*)",
+      "mcp__playwright",
       "mcp__claude_ai_Gmail__forward",
       "mcp__claude_ai_Gmail__reply",
       "mcp__claude_ai_Gmail__trash_message",

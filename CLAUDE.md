@@ -47,6 +47,7 @@ file paths, the relevant lines from `me/` and `people/`, today's date and time z
 | `reflector` | "Mirror" | Phase 2 | Weekly: turns logs, signals and corrections into proposed lessons. Never applies them. |
 | `relationships` | "Kin" | Live | People: profiles, birthdays and milestone years, gift and celebration ideas, prep before seeing someone, the right email for an invite. Read-only; proposes profile updates. |
 | `watch-digest` | "Rewind" | Live | Daily: what Michael watched on YouTube, what he is learning, ideas for Juno, the venture or his study. Haiku. Proposals only. |
+| `browser` | "Hands" | P2 | Fills one web form headless in its own profile; never submits without a card. Run by the bridge, not the Agent tool. |
 | `youtube` | "Reel" | Live | YouTube transcripts, search and video info via `tools/youtube.py`. Summaries with timestamps. Read-only. |
 
 A subagent whose phase has not started does not exist yet. If a request needs one, do the safe, read-only part
@@ -66,6 +67,11 @@ yourself and say which agent would normally handle it.
 - "Look into", "research", "what's new in" → `researcher`.
 - A part, a product, a price, "is there a recall" → the `shopping` skill: exact part number, free and warranty
   programs first, price read on the product page. Never buys.
+- A web form to fill (a warranty claim, a registration, a request form) → `python tools/browser_queue.py add --url
+  <https form page> --task "<what it's for>" --value "Field=value" ... --why "<plain words>" --session-id <this
+  session>`. Values come from what you already know (`domains/`, his order mail, the label photo); never a password,
+  card, bank or ID number. The bridge fills it headless and posts a card with every value; only his tap submits.
+  Tell him the card is coming. Never fill or submit a form any other way.
 - "Add an agent for", "I need something that can", or a kind of request no agent covers that keeps coming back →
   the `new-subagent` skill.
 - "What do you remember about", "forget", "what have you picked up" → the `memory` skill.

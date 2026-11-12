@@ -1,0 +1,13 @@
+{
+  "_comment": "Playwright MCP config for Juno's browser agent (gateway/browser_agent.py fills in the paths and sites per run). Headless Chromium from Playwright, its own profile under state/browser/profile, never Michael's Chrome. Page-registered tools (WebMCP) are off: a page can't hand the agent new tools. Pinned: @playwright/mcp 0.0.85.",
+  "browser": {
+    "browserName": "chromium",
+    "userDataDir": "{profile}",
+    "launchOptions": {"headless": true}
+  },
+  "capabilities": ["core"],
+  "webmcp": false,
+  "saveSession": false,
+  "outputDir": "{out}",
+  "network": {"allowedOrigins": "{origins}"}
+}

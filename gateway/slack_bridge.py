@@ -839,6 +839,29 @@ class Bridge:
             return "The draft changed since that card, so I didn't send it. A fresh card with the new text is coming. 👀"
         return "The draft's recipients changed since that card, so I didn't send it. Send it from Gmail if it's right. 👀"
 
+    def submit_form(self, entry: dict, state: Path) -> str:
+        """An approved form card: the bridge's own browser run submits exactly what the card showed
+        (gateway/browser_agent.py). No model session is resumed and no tool is granted to one."""
+        import browser_agent
+        import followups
+        try:
+            ok, line = browser_agent.submit(self._run, self.root, entry,
+                                            add_followup=lambda **kw: followups.add(**kw, path=state / "followups.json"))
+        except Exception as exc:
+            self.approvals.mark(entry["id"], "failed")
+            approval_policy.audit(state, "submit_failed", entry, type(exc).__name__)
+            heartbeat("approval", False, f"form submit failed: {type(exc).__name__}")
+            return "The form run broke before it finished, so treat it as not submitted. 🙃"
+        approval_policy.audit(state, "executed" if ok else "submit_stopped", entry, line[:200])
+        approval_policy.signal(state, "form.submitted" if ok else "form.not_submitted", entry)
+        heartbeat("approval", ok, line[:120])
+        return line
+
+    def fill_forms(self) -> list[str]:
+        """Queued form requests → headless fill runs → cards (the approvals watcher posts them)."""
+        import browser_agent
+        return browser_agent.process(self._run, self.root, self.approvals.append)
+
     def handle_approval(self, approval_id: str, decision: str, *, user_id: str | None, auto: str | None = None) -> str:
         """A button was tapped (approved, always, denied), or an auto rule applies. Carries out or declines the action
         in the recorded session and returns text for the thread."""
@@ -874,6 +897,8 @@ class Bridge:
         approval_policy.signal(state, f"approval.{decision}", entry, auto=auto or None)
         if decision == "approved" and entry.get("action_class") == "email.send":
             return self.send_approved_email(entry, state)
+        if decision == "approved" and entry.get("action_class") == "web.form.submit":
+            return self.submit_form(entry, state)
         if decision == "approved" and entry.get("action_class") == "subagent.install":
             done = self.install(entry)
             tools, env = (), {}
@@ -1407,6 +1432,18 @@ def approvals_watcher(client, bridge: Bridge, interval: int = 20) -> None:
         time.sleep(interval)
 
 
+def browser_watcher(client, bridge: Bridge, interval: int = 15) -> None:
+    """Form fills take minutes, so they run on their own thread instead of holding up the cards."""
+    while True:
+        try:
+            if not brakes.paused(bridge.root):
+                for line in bridge.fill_forms():
+                    post_to_michael(client, bridge, line)
+        except Exception as exc:  # keep the watcher alive
+            LOG.exception("browser watcher: %s", exc)
+        time.sleep(interval)
+
+
 def timers_watcher(client, bridge: Bridge, interval: int = 60) -> None:
     """Leave-by and other one-shot timers set by the morning brief (state/timers.json)."""
     while True:
@@ -1598,6 +1635,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     start_scheduler(app.client, bridge)
     threading.Thread(target=approvals_watcher, args=(app.client, bridge), daemon=True).start()
+    threading.Thread(target=browser_watcher, args=(app.client, bridge), daemon=True).start()
     threading.Thread(target=timers_watcher, args=(app.client, bridge), daemon=True).start()
     threading.Thread(target=hevy_watcher, args=(app.client, bridge), daemon=True).start()
     heartbeat("bridge", True, "started")
