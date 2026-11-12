@@ -15,6 +15,9 @@ What it can't do, on purpose: send to anyone but Michael, trash, archive, touch 
       auto. Anyone else on To, Cc or Bcc and it refuses. Logged to state/audit.jsonl.
   python tools/gmail.py labels
       Juno/ labels with message counts.
+  python tools/gmail.py attachments --message MSG_ID
+      Saves the text, Markdown, CSV, PDF and photo attachments of mail from Michael or a known sender to
+      state/attachments/ (a PDF also gets a .txt of its text) and prints their paths. Refuses other senders.
   python tools/gmail.py label (--message ID | --thread ID) [--add Juno/X ...] [--remove Juno/Y ...]
       Juno/ labels only; a missing one is created on --add.
 
@@ -308,6 +311,86 @@ def label(target: str, kind: str, add: list[str], remove: list[str], token: str 
     return {kind: target, "added": add, "removed": [n for n in remove if n in have]}
 
 
+# --- attachments (P2 brief, #7) ------------------------------------------------------------------------------------
+ATTACH_DIR = ROOT / "state" / "attachments"
+ATTACH_MAX = 10 * 1024 * 1024
+ATTACH_TYPES = {"text/plain": "txt", "text/markdown": "md", "text/x-markdown": "md", "text/csv": "csv",
+                "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif",
+                "image/webp": "webp"}
+ATTACH_EXTS = {"txt": "txt", "md": "md", "markdown": "md", "csv": "csv", "pdf": "pdf", "jpg": "jpg", "jpeg": "jpg",
+               "png": "png", "gif": "gif", "webp": "webp"}
+ATTACH_FROM = ("michael", "known")  # never for contact or unknown senders (CLAUDE.md, Trust labels)
+
+
+def _attach_ext(part: dict) -> str:
+    mime = (part.get("mimeType") or "").split(";")[0].lower()
+    if mime in ATTACH_TYPES:
+        return ATTACH_TYPES[mime]
+    name = part.get("filename") or ""
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return ATTACH_EXTS.get(ext, "") if mime in ("", "application/octet-stream") or mime.startswith("text/") else ""
+
+
+def pdf_text(path: Path) -> str:
+    """The text of a PDF, or "" when pypdf is missing or the file has none (a scan)."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return ""
+    try:
+        return "\n\n".join((page.extract_text() or "") for page in PdfReader(str(path)).pages[:50]).strip()
+    except Exception:
+        return ""
+
+
+def attachments(message_id: str, token: str | None = None, get=None, root: Path | None = None,
+                label=None) -> dict:
+    """Save the readable attachments of one message (text, Markdown, CSV, PDF, photos) to state/attachments/ and
+    return their paths. Only for mail from Michael himself or someone with a people/ file. Files are named by the
+    message id, never by the sender's file name. A PDF also gets a .txt copy of its text."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", message_id or ""):
+        raise _bad("not a Gmail message id")
+    get = get or google_read._get
+    token = token or google_read.access_token()
+    folder = (root / "state" / "attachments") if root else ATTACH_DIR
+    msg = get(f"{GMAIL}/messages/{message_id}", token, {"format": "full"})
+    payload = msg.get("payload", {})
+    sender = next((a for _, a in getaddresses([_headers(payload).get("from", "")]) if a), "")
+    who = (label or trust.label)(sender)
+    if who not in ATTACH_FROM:
+        return {"saved": [], "refused": f"attachments from a {who} sender are never opened"}
+    saved, skipped, stack, n = [], [], [payload], 0
+    while stack:
+        part = stack.pop(0)
+        stack.extend(part.get("parts") or [])
+        body = part.get("body") or {}
+        if not (part.get("filename") and body.get("attachmentId")):
+            continue
+        ext = _attach_ext(part)
+        size = int(body.get("size") or 0)
+        if not ext or size > ATTACH_MAX or n >= 10:
+            skipped.append({"type": part.get("mimeType", ""), "kb": round(size / 1024)})
+            continue
+        got = get(f"{GMAIL}/messages/{message_id}/attachments/{body['attachmentId']}", token)
+        raw = got.get("data", "")
+        data = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+        if len(data) > ATTACH_MAX:
+            continue
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"gmail-{message_id}-{n}.{ext}"
+        path.write_bytes(data)
+        item = {"path": path.relative_to(folder.parents[1]).as_posix(), "type": part.get("mimeType", ""),
+                "kb": round(len(data) / 1024), "name": re.sub(r"[^\w .()-]", "", part["filename"])[:60]}
+        if ext == "pdf":
+            txt = pdf_text(path)
+            if txt:
+                path.with_suffix(".txt").write_text(txt, encoding="utf-8")
+                item["text_path"] = path.with_suffix(".txt").relative_to(folder.parents[1]).as_posix()
+        saved.append(item)
+        n += 1
+    return {"saved": saved, "skipped": skipped, "from": who}
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -332,6 +415,8 @@ def parser() -> argparse.ArgumentParser:
     ss = sub.add_parser("send-self")
     ss.add_argument("--id", required=True)
     sub.add_parser("labels")
+    att = sub.add_parser("attachments")
+    att.add_argument("--message", required=True)
     lab = sub.add_parser("label")
     where = lab.add_mutually_exclusive_group(required=True)
     where.add_argument("--message")
@@ -365,6 +450,8 @@ def main(argv: list[str]) -> int:
             out = send_self(args.id)
         elif args.cmd == "labels":
             out = list_labels()
+        elif args.cmd == "attachments":
+            out = attachments(args.message)
         else:
             out = label(args.message or args.thread, "message" if args.message else "thread", args.add, args.remove)
         print(json.dumps(out))  # ASCII-safe: the Windows console chokes on emoji in titles

@@ -107,3 +107,98 @@ def test_dialogue_set_covers_attachments_and_photos():
 def test_constitution_forbids_asking_him_to_paste():
     text_ = (ROOT / "v2" / "prompts" / "constitution.md").read_text(encoding="utf-8")
     assert "Never ask him to paste" in text_ and "attachment" in text_
+
+
+# --- 2. attachments ----------------------------------------------------------------------------------------------
+
+def _b64(data: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _gmail_get(sender: str):
+    payload = {"headers": [{"name": "From", "value": f"Me <{sender}>"}], "mimeType": "multipart/mixed", "parts": [
+        {"mimeType": "text/plain", "body": {"size": 5, "data": _b64(b"hello")}},
+        {"mimeType": "application/octet-stream", "filename": "write-up.md", "body": {"attachmentId": "A1", "size": 9}},
+        {"mimeType": "application/zip", "filename": "x.zip", "body": {"attachmentId": "A2", "size": 9}},
+        {"mimeType": "image/png", "filename": "label.png", "body": {"attachmentId": "A3", "size": 4}}]}
+    seen = []
+
+    def get(url, token, params=None):
+        seen.append(url)
+        if url.endswith("/attachments/A1"):
+            return {"data": _b64(b"# Write-up")}
+        if url.endswith("/attachments/A3"):
+            return {"data": _b64(b"\x89PNG")}
+        return {"payload": payload}
+    return get, seen
+
+
+def test_gmail_attachments_saves_readable_files_from_known_senders(tmp_path):
+    import gmail
+    get, seen = _gmail_get("me@example.com")
+    out = gmail.attachments("msg123456", token="t", get=get, root=tmp_path, label=lambda a: "michael")
+    paths = [s["path"] for s in out["saved"]]
+    assert paths == ["state/attachments/gmail-msg123456-0.md", "state/attachments/gmail-msg123456-1.png"]
+    assert (tmp_path / paths[0]).read_text(encoding="utf-8") == "# Write-up"
+    assert out["skipped"] == [{"type": "application/zip", "kb": 0}] and not any("A2" in u for u in seen)
+
+
+def test_gmail_attachments_never_opens_unknown_or_contact_senders(tmp_path):
+    import gmail
+    for who in ("unknown", "contact"):
+        get, seen = _gmail_get("stranger@example.org")
+        out = gmail.attachments("msg123456", token="t", get=get, root=tmp_path, label=lambda a, w=who: w)
+        assert out["saved"] == [] and "never opened" in out["refused"] and len(seen) == 1
+    assert not (tmp_path / "state" / "attachments").exists()
+
+
+def test_gmail_attachments_rejects_odd_ids():
+    import gmail
+    from google_read import GoogleError
+    try:
+        gmail.attachments("../../etc", token="t", get=lambda *a, **k: {})
+    except GoogleError:
+        return
+    raise AssertionError("expected a refusal")
+
+
+def test_pdf_attachment_gets_a_text_copy(tmp_path, monkeypatch):
+    import gmail
+    payload = {"headers": [{"name": "From", "value": "me@example.com"}], "parts": [
+        {"mimeType": "application/pdf", "filename": "r.pdf", "body": {"attachmentId": "P1", "size": 4}}]}
+    monkeypatch.setattr(gmail, "pdf_text", lambda path: "Order 12345")
+    get = lambda url, token, params=None: {"data": _b64(b"%PDF")} if url.endswith("P1") else {"payload": payload}
+    out = gmail.attachments("msg123456", token="t", get=get, root=tmp_path, label=lambda a: "known")
+    assert (tmp_path / out["saved"][0]["text_path"]).read_text(encoding="utf-8") == "Order 12345"
+
+
+def test_discord_markdown_file_is_saved_and_named_in_the_dm(tmp_path):
+    import discord_transport as dt
+    import slack_bridge
+    ev = dt.message_event(message_id="1290000000000000001", channel_id="DM-1", author_id="U9", content="read this",
+                          attachments=[{"id": 5, "content_type": "text/markdown; charset=utf-8", "size": 30,
+                                        "url": "https://cdn.discordapp.com/a/5/write-up.md", "filename": "write-up.md"},
+                                       {"id": 6, "content_type": "", "size": 30,
+                                        "url": "https://cdn.discordapp.com/a/6/n.csv", "filename": "n.csv"},
+                                       {"id": 7, "content_type": "application/zip", "size": 30,
+                                        "url": "https://cdn.discordapp.com/a/7/x.zip", "filename": "x.zip"},
+                                       {"id": 8, "content_type": "text/plain", "size": 30,
+                                        "url": "https://cdn.discordapp.com/a/8/page.txt", "filename": "page.txt"}])
+    pages = {"5": b"# Notes", "6": b"a,b", "8": b"<!DOCTYPE html><html>sign in"}
+    saved = slack_bridge.save_files(ev, "", tmp_path, hosts=dt.FILE_HOSTS,
+                                    fetch=lambda url: pages[url.split("/a/")[1].split("/")[0]])
+    assert saved == {"5": "state/attachments/1290000000000000001-0.md",
+                     "6": "state/attachments/1290000000000000001-1.csv"}
+    text_ = slack_bridge.dm_text(ev, saved)
+    assert "[He attached a file (write-up.md), saved at state/attachments/1290000000000000001-0.md." in text_
+    assert "[He attached x.zip, which you can't open." in text_
+    from v2.converse import ATTACHED
+    assert ATTACHED.search(text_)
+
+
+def test_oversized_file_is_not_downloaded(tmp_path):
+    import slack_bridge
+    ev = {"ts": "1.2", "files": [{"id": "F1", "mimetype": "application/pdf", "size": 11 * 1024 * 1024,
+                                  "url_private": "https://files.slack.com/big.pdf"}]}
+    assert slack_bridge.save_files(ev, "t", tmp_path, fetch=lambda u: (_ for _ in ()).throw(AssertionError())) == {}

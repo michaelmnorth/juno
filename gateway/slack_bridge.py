@@ -358,6 +358,11 @@ DM_SUBTYPES = (None, "file_share", "thread_broadcast")
 
 
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}
+# Files he sends that Juno can read (P2 brief, #8): text, Markdown, CSV and PDF. Matched on the type, or on the
+# extension when Discord or Slack gives none. Saved under a name from the message id, never the uploaded name.
+FILE_TYPES = {"text/plain": "txt", "text/markdown": "md", "text/x-markdown": "md", "text/csv": "csv",
+              "application/pdf": "pdf"}
+FILE_EXTS = {"txt": "txt", "md": "md", "markdown": "md", "csv": "csv", "pdf": "pdf"}
 IMAGE_MAX = 10 * 1024 * 1024  # Claude's image reader tops out near here anyway
 
 
@@ -368,10 +373,31 @@ PUBLIC_NOTE = ("[He @mentioned you in a server channel that other people can rea
                "send those in his DMs instead. Cards and approvals still go to his DMs.]\n")
 
 
-def save_images(event: dict, token: str, root: Path = ROOT, fetch=None,
-                hosts: tuple[str, ...] = SLACK_FILE_HOSTS) -> dict[str, str]:
-    """Download the photos Michael attached (files:read, added 2026-11-08) to state/attachments/ (git-ignored), so
-    the DM run can Read them. Files are named by message ts, never by the uploaded name. Returns {file id: path}."""
+def _kind(f: dict) -> tuple[str, str] | None:
+    """("photo" or "file", extension) for an attachment Juno can open, else None."""
+    mime = (f.get("mimetype") or "").split(";")[0].strip().lower()
+    if mime in IMAGE_TYPES:
+        return "photo", IMAGE_TYPES[mime]
+    if mime in FILE_TYPES:
+        return "file", FILE_TYPES[mime]
+    ext = (f.get("name") or "").rsplit(".", 1)[-1].lower() if "." in (f.get("name") or "") else ""
+    if ext in FILE_EXTS and (not mime or mime.startswith("text/") or mime == "application/octet-stream"):
+        return "file", FILE_EXTS[ext]
+    return None
+
+
+def _looks_like_login_page(data: bytes, ext: str) -> bool:
+    head = data[:64].lstrip().lower()
+    if ext in IMAGE_TYPES.values() or ext == "pdf":
+        return data[:1] == b"<"
+    return head.startswith(b"<!doctype html") or head.startswith(b"<html")
+
+
+def save_files(event: dict, token: str, root: Path = ROOT, fetch=None,
+               hosts: tuple[str, ...] = SLACK_FILE_HOSTS) -> dict[str, str]:
+    """Download the photos and readable files (text, Markdown, CSV, PDF) Michael attached to state/attachments/
+    (git-ignored), so the DM run can Read them. Only from the channel's own file hosts, at most 10 MB each, named by
+    message ts, never by the uploaded name. Returns {file id: path}."""
     import urllib.request
 
     def default_fetch(url: str) -> bytes:
@@ -382,32 +408,44 @@ def save_images(event: dict, token: str, root: Path = ROOT, fetch=None,
     fetch = fetch or default_fetch
     out = {}
     for n, f in enumerate(event.get("files") or []):
-        ext, url = IMAGE_TYPES.get(f.get("mimetype", "")), f.get("url_private_download") or f.get("url_private")
-        if not ext or not url or not url.startswith(tuple(hosts)) or (f.get("size") or 0) > IMAGE_MAX:
+        kind, url = _kind(f), f.get("url_private_download") or f.get("url_private")
+        if not kind or not url or not url.startswith(tuple(hosts)) or (f.get("size") or 0) > IMAGE_MAX:
             continue
         try:
             data = fetch(url)
         except Exception as exc:
             LOG.info("attachment %s not downloaded: %s", f.get("id"), exc)
             continue
-        if len(data) > IMAGE_MAX or data[:1] == b"<":  # too big, or Slack's HTML login page instead of the image
+        if len(data) > IMAGE_MAX or _looks_like_login_page(data, kind[1]):  # too big, or a sign-in page
             continue
-        rel = Path("state") / "attachments" / f"{event.get('ts', 'x').replace('.', '-')}-{n}.{ext}"
+        rel = Path("state") / "attachments" / f"{event.get('ts', 'x').replace('.', '-')}-{n}.{kind[1]}"
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_bytes(data)
         out[f.get("id", str(n))] = rel.as_posix()
     return out
 
 
+save_images = save_files  # the old name, kept for callers and tests
+
+
+def _safe_name(name: str) -> str:
+    return re.sub(r"[^\w .()-]", "", name)[:60].strip() or "a file"
+
+
 def dm_text(event: dict, saved: dict[str, str] | None = None) -> str:
-    """The DM's words, plus a line per attachment: the saved path for a photo Juno can open, a name otherwise."""
+    """The DM's words, plus a line per attachment: the saved path for a photo or file Juno can open, a name
+    otherwise. v2 hands a message with a saved one straight to v1 (v2/converse.py ATTACHED)."""
     text = event.get("text") or ""
     saved = saved or {}
     for f in event.get("files") or []:
         path = saved.get(f.get("id", ""))
-        name = f.get("name") or f.get("title") or "a file"
-        text += (f"\n[He attached a photo, saved at {path}. Read it to see it.]" if path else
-                 f"\n[He attached {name}, which you can't open. Mention that in one clause only if it matters.]")
+        name = _safe_name(f.get("name") or f.get("title") or "")
+        if path and path.rsplit(".", 1)[-1] in IMAGE_TYPES.values():
+            text += f"\n[He attached a photo, saved at {path}. Read it to see it.]"
+        elif path:
+            text += f"\n[He attached a file ({name}), saved at {path}. Read it to see it.]"
+        else:
+            text += f"\n[He attached {name}, which you can't open. Mention that in one clause only if it matters.]"
     return text.strip()
 
 
@@ -903,7 +941,7 @@ def build_app(bridge: Bridge, app=None):
         except (KeyError, TypeError, ValueError):
             latency = None
         acknowledge(client, event["channel"], event["ts"], latency)  # eyes, then the working line, at once
-        saved = (save_images(event, client.token, bridge.root, hosts=getattr(client, "file_hosts", SLACK_FILE_HOSTS))
+        saved = (save_files(event, client.token, bridge.root, hosts=getattr(client, "file_hosts", SLACK_FILE_HOSTS))
                  if event.get("files") else {})
         text = dm_text(event, saved)
         if event.get("channel_type") == "mention":  # he @mentioned Juno in a server channel others can read

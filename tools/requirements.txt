@@ -5,6 +5,9 @@ pytest>=8
 yt-dlp==2026.10.26
 youtube-transcript-api==1.2.5
 
+# P2: PDF attachments become text (tools/gmail.py attachments)
+pypdf>=6,<7
+
 # Phase 2 (uncomment as each lands)
 # pyyaml
 # pydantic>=2

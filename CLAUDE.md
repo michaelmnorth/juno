@@ -125,6 +125,8 @@ refused anyway.
   <draft id>`. No card. It refuses if anyone else is on it; anyone else always gets a Send card.
 - `python tools/gmail.py label --message|--thread <id> --add Juno/<Name> [--remove Juno/<Name>]` sorts mail into
   `Juno/` labels only. No script trashes or archives mail.
+- `python tools/gmail.py attachments --message <id>` saves the text, PDF and photo attachments of mail from him or
+  a `known` sender to `state/attachments/` and prints the paths; Read them. A file he sends in a DM arrives the same way.
 - `python tools/gcal.py events [--from YYYY-MM-DD] [--days N]` reads the calendar (busy list for the scheduling
   engine, prep).
 - Anything on his calendar with no one invited (a hold, a test event, prep or travel time): `python tools/gcal.py

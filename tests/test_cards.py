@@ -186,7 +186,7 @@ def test_photo_message_reaches_juno():
     assert slack_bridge.dm_text({"text": "hi"}) == "hi"
 
 
-def test_save_images_keeps_photos_only(tmp_path):
+def test_save_files_keeps_photos_and_readable_files(tmp_path):
     event = {"ts": "17.5", "files": [
         {"id": "F1", "mimetype": "image/jpeg", "url_private_download": "https://files.slack.com/a.jpg"},
         {"id": "F2", "mimetype": "application/pdf", "url_private_download": "https://files.slack.com/b.pdf"},
@@ -198,9 +198,11 @@ def test_save_images_keeps_photos_only(tmp_path):
         fetched.append(url)
         return b"<html>sign in</html>" if "login" in url else b"\xff\xd8jpeg"
     saved = slack_bridge.save_images(event, "t", tmp_path, fetch=fetch)
-    assert saved == {"F1": "state/attachments/17-5-0.jpg"}  # no pdf, no foreign host, no HTML login page
+    # PDFs are readable since P2; still no foreign host and no HTML sign-in page
+    assert saved == {"F1": "state/attachments/17-5-0.jpg", "F2": "state/attachments/17-5-1.pdf"}
     assert (tmp_path / saved["F1"]).read_bytes() == b"\xff\xd8jpeg"
-    assert fetched == ["https://files.slack.com/a.jpg", "https://files.slack.com/login.png"]
+    assert fetched == ["https://files.slack.com/a.jpg", "https://files.slack.com/b.pdf",
+                       "https://files.slack.com/login.png"]
 
 
 class DMClient(HomeClient):
