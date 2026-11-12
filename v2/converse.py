@@ -121,9 +121,12 @@ class Engine:
         self._remember(channel, text, reply, "", thread, [], True)
 
     def recent_lines(self, channel: str, limit: int = 4) -> str:
-        """The last few turns, as plain lines for a v1 handoff prompt."""
-        return "\n".join(f"{'Michael' if t['role'] == 'user' else 'You'}: {t['text'][:300]}"
-                         for t in self.store.turns(channel, limit))
+        """The last few turns, as plain lines for a v1 handoff prompt: Michael's messages and v2's own replies.
+        v1's earlier replies are left out (v1 has its own session for those), so a mistaken belief in one of them,
+        like "that tool is blocked", is never fed back to v1 as fact (found 2026-11-11)."""
+        rows = [t for t in self.store.turns(channel, limit * 2) if t["role"] == "user" or t.get("run_id")]
+        return "\n".join(f"{'Michael' if t['role'] == 'user' else 'The lighter engine'}: {t['text'][:300]}"
+                         for t in rows[-limit:])
 
     def reset(self, channel: str) -> None:
         self.store.save_thread(channel, summary="", working_set=[], tainted=False)

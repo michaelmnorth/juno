@@ -410,7 +410,8 @@ def test_v1_reply_is_kept_and_taints_the_thread(env):
     e = env.make([])
     e.note_v1_reply("C1", "how was my sleep", "[react:+1] 7h 10m, decent")
     t = e.store.thread("C1", NOW)
-    assert t["tainted"] and "7h 10m" in e.recent_lines("C1")
+    assert t["tainted"] and "how was my sleep" in e.recent_lines("C1")
+    assert "7h 10m" not in e.recent_lines("C1")  # v1's own replies never go back to v1 as background
 
 
 def test_new_chats_default_to_v2(env):

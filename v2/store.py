@@ -131,7 +131,8 @@ class Store:
                    (channel, role, text, run_id, now_iso()))
 
     def turns(self, channel: str, limit: int = 40) -> list[dict]:
-        rows = self._all("select role, text, at from turns where channel=? order by id desc limit ?", (channel, limit))
+        rows = self._all("select role, text, at, run_id from turns where channel=? order by id desc limit ?",
+                         (channel, limit))
         return [dict(r) for r in reversed(rows)]
 
     # --- ledger -------------------------------------------------------------------------------------------------
