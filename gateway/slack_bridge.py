@@ -362,6 +362,10 @@ IMAGE_MAX = 10 * 1024 * 1024  # Claude's image reader tops out near here anyway
 
 
 SLACK_FILE_HOSTS = ("https://files.slack.com/",)
+# Michael @mentioned Juno in a Discord server channel (DV18): other people can read the answer.
+PUBLIC_NOTE = ("[He @mentioned you in a server channel that other people can read. Answer there, but keep his mail, "
+               "calendar details, health, money and anything about people in his life out of the reply; offer to "
+               "send those in his DMs instead. Cards and approvals still go to his DMs.]\n")
 
 
 def save_images(event: dict, token: str, root: Path = ROOT, fetch=None,
@@ -889,7 +893,8 @@ def build_app(bridge: Bridge, app=None):
 
     @app.event("message")
     def on_message(event, client, logger):
-        if event.get("channel_type") != "im" or event.get("bot_id") or event.get("subtype") not in DM_SUBTYPES:
+        if (event.get("channel_type") not in ("im", "mention") or event.get("bot_id")
+                or event.get("subtype") not in DM_SUBTYPES):
             return
         if not bridge.allowed(event.get("user")):
             return
@@ -900,7 +905,10 @@ def build_app(bridge: Bridge, app=None):
         acknowledge(client, event["channel"], event["ts"], latency)  # eyes, then the working line, at once
         saved = (save_images(event, client.token, bridge.root, hosts=getattr(client, "file_hosts", SLACK_FILE_HOSTS))
                  if event.get("files") else {})
-        batches.submit(event["channel"], {"ts": event["ts"], "user": event.get("user"), "text": dm_text(event, saved)})
+        text = dm_text(event, saved)
+        if event.get("channel_type") == "mention":  # he @mentioned Juno in a server channel others can read
+            text = PUBLIC_NOTE + text
+        batches.submit(event["channel"], {"ts": event["ts"], "user": event.get("user"), "text": text})
 
     @app.action("approve")
     def on_approve(ack, body, client):

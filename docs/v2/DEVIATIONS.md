@@ -153,3 +153,7 @@ Changed the same day (owner): the bot holds Administrator on Michael's server, h
 risk was stated (a leaked token could do anything there). What Juno can do is still only what
 `tools/discord_admin.py` offers: channels and categories, plus the server's name, icon and banner. Still no delete,
 no roles, members, bans or messages; adding any of those is a code change, not a permission change.
+
+## DV18 · Juno answers Michael's @mentions in server channels (owner 2026-11-11)
+
+On Discord, a message from Michael that @mentions Juno in a server channel is handled like a DM, with its own thread and session per channel. The bot reads only those: other members' and bots' messages never reach it (Discord sends message text to a bot without the message-content intent only for DMs and mentions). The prompt tells Juno the channel is readable by others: no mail, calendar detail, health, money or people in the reply; offer the DM instead. Cards and approvals stay in DMs. Michael does not want his briefs or other output posted to channels.

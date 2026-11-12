@@ -401,9 +401,9 @@ class App:
 
 
 def message_event(*, message_id: str, channel_id: str, author_id: str, content: str,
-                  attachments: list[dict]) -> dict:
-    """A Discord DM in the shape the bridge's Slack message handler reads."""
-    return {"type": "message", "channel_type": "im", "channel": channel_id, "user": author_id, "ts": message_id,
+                  attachments: list[dict], mention: bool = False) -> dict:
+    """A Discord DM (or an @mention of Juno in a server channel) in the shape the bridge's Slack handler reads."""
+    return {"type": "message", "channel_type": "mention" if mention else "im", "channel": channel_id, "user": author_id, "ts": message_id,
             "sent_at": snowflake_time(message_id), "text": content,
             **({"subtype": "file_share", "files": [
                 {"id": str(a.get("id")), "mimetype": (a.get("content_type") or "").split(";")[0],
@@ -437,6 +437,7 @@ def run_gateway(token: str, app: App, allowed: set[str], executor=None) -> None:
     pool = executor or ThreadPoolExecutor(max_workers=8, thread_name_prefix="juno-discord")
     intents = discord.Intents.none()
     intents.dm_messages = True  # DMs carry their text without the privileged message-content intent
+    intents.guild_messages = True  # server messages; only ones that @mention Juno carry their text (DV18)
     intents.guilds = True
     client = discord.Client(intents=intents)
 
@@ -446,10 +447,16 @@ def run_gateway(token: str, app: App, allowed: set[str], executor=None) -> None:
 
     @client.event
     async def on_message(m):
-        if m.guild is not None or m.author.bot or str(m.author.id) not in allowed:
-            return
+        if m.author.bot or str(m.author.id) not in allowed:
+            return  # only Michael; other members and bots are never read
+        mention = m.guild is not None
+        if mention and client.user not in m.mentions:
+            return  # in a server, only messages that @mention Juno
+        content = m.content or ""
+        if mention:
+            content = re.sub(rf"<@!?{client.user.id}>", "", content).strip() or "(he just @mentioned you)"
         event = message_event(message_id=str(m.id), channel_id=str(m.channel.id), author_id=str(m.author.id),
-                              content=m.content or "", attachments=[
+                              content=content, mention=mention, attachments=[
                                   {"id": a.id, "content_type": a.content_type, "url": a.url, "size": a.size,
                                    "filename": a.filename} for a in m.attachments])
         asyncio.get_running_loop().run_in_executor(pool, app.dispatch_event, "message", event)

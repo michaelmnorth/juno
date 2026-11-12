@@ -169,3 +169,18 @@ def test_channel_setting_and_allowlist_per_app(tmp_path):
     assert slack_bridge.load_channel(tmp_path) == "discord"
     assert slack_bridge.load_allowlist(tmp_path) == {"999"}
     assert slack_bridge.load_allowlist(tmp_path, "slack") == {"U1"}
+
+
+def test_a_server_mention_is_its_own_event_kind(tmp_path, monkeypatch):
+    ev = dt.message_event(message_id="1", channel_id="C-lounge", author_id="U9", content="you there?",
+                          attachments=[], mention=True)
+    assert ev["channel_type"] == "mention" and ev["channel"] == "C-lounge"
+    seen = []
+    monkeypatch.setattr(slack_bridge, "load_allowlist", lambda root, channel=None: {"U9"})
+    monkeypatch.setattr(slack_bridge.Debouncer, "submit", lambda self, ch, item: seen.append((ch, item["text"])))
+    bridge = slack_bridge.Bridge(root=tmp_path, sessions=SessionMap(tmp_path / "s.json"),
+                                 approvals=Approvals(tmp_path / "a.json"), runner=lambda *a, **k: None)
+    app = slack_bridge.build_app(bridge, dt.App(client(tmp_path)))
+    app.dispatch_event("message", ev)
+    app.dispatch_event("message", {**ev, "user": "someone-else"})
+    assert len(seen) == 1 and seen[0][0] == "C-lounge" and seen[0][1].startswith(slack_bridge.PUBLIC_NOTE)
