@@ -93,24 +93,46 @@ def test_fill_run_never_submits(tmp_path):
     assert d("browser_click", {"element": "Submit"}, FILL, tmp_path, session="other") == "allow"  # another run
 
 
-def _pass(root: Path, approval_id="a-1", values=("Sam", "WM1234"), age=0):
+APPROVED = (("Customer name", "Juno Test"), ("Medium", "true"))
+SUBMIT = {**FILL, "JUNO_BROWSER_RUN": "submit", "JUNO_BROWSER_PASS": "a-1"}
+
+
+def _pass(root: Path, approval_id="a-1", fields=APPROVED, age=0):
     p = root / "state" / "browser" / "pass.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     made = datetime.now(timezone.utc) - timedelta(seconds=age)
-    p.write_text(json.dumps({"approval_id": approval_id, "values": list(values), "created": made.isoformat()}),
-                 encoding="utf-8")
+    p.write_text(json.dumps({"approval_id": approval_id, "fields": [{"field": f, "value": v} for f, v in fields],
+                             "created": made.isoformat()}), encoding="utf-8")
 
 
-def test_submit_needs_the_pass_and_only_its_values(tmp_path):
-    env = {**FILL, "JUNO_BROWSER_RUN": "submit", "JUNO_BROWSER_PASS": "a-1"}
-    assert d("browser_click", {"element": "Submit claim"}, env, tmp_path) == "deny"  # no pass yet
+def _form(*pairs, kind="textbox"):
+    return {"fields": [{"name": f, "type": kind, "value": v} for f, v in pairs]}
+
+
+def test_submit_needs_the_pass_then_every_value_before_the_button(tmp_path):
+    assert d("browser_fill_form", _form(*APPROVED), SUBMIT, tmp_path) == "deny"  # no pass
     _pass(tmp_path)
-    assert d("browser_click", {"element": "Submit claim"}, env, tmp_path) == "allow"
-    assert d("browser_type", {"element": "Name", "text": " sam "}, env, tmp_path) == "allow"
-    assert d("browser_type", {"element": "Name", "text": "Alex"}, env, tmp_path) == "deny"
-    assert d("browser_click", {"element": "Submit"}, {**env, "JUNO_BROWSER_PASS": "a-2"}, tmp_path) == "deny"
+    assert d("browser_fill_form", _form(*APPROVED), SUBMIT, tmp_path, session="s2") == "allow"
+    assert d("browser_click", {"element": "Submit order"}, {**SUBMIT, "JUNO_BROWSER_PASS": "a-2"}, tmp_path,
+             session="s2") == "deny"
+    assert d("browser_click", {"element": "Submit order button"}, SUBMIT, tmp_path, session="s3") == "deny"  # none in
+    assert d("browser_type", {"element": "Customer name textbox", "text": " juno test "}, SUBMIT, tmp_path,
+             session="s3") == "allow"
+    assert d("browser_click", {"element": "Submit order"}, SUBMIT, tmp_path, session="s3") == "deny"  # one missing
+    assert d("browser_fill_form", _form(("Medium", "true"), kind="radio"), SUBMIT, tmp_path, session="s3") == "allow"
+    assert d("browser_click", {"element": "Submit order"}, SUBMIT, tmp_path, session="s3") == "allow"
+    assert d("browser_click", {"element": "Continue"}, SUBMIT, tmp_path, session="s3") == "allow"  # later pages
     _pass(tmp_path, age=gate.PASS_MAX_AGE + 5)
-    assert d("browser_click", {"element": "Submit claim"}, env, tmp_path) == "deny"
+    assert d("browser_click", {"element": "Submit order"}, SUBMIT, tmp_path, session="s3") == "deny"
+
+
+def test_a_refused_value_stops_the_run_so_no_empty_form_goes_out(tmp_path):
+    """The 2026-11-12 dry run: the fill was refused, the click sent beside it went through, an empty form posted."""
+    _pass(tmp_path)
+    assert d("browser_fill_form", _form(("Large", "true"), kind="radio"), SUBMIT, tmp_path) == "deny"
+    assert d("browser_fill_form", _form(*APPROVED), SUBMIT, tmp_path) == "deny"  # stopped for good
+    assert d("browser_click", {"element": "Submit order"}, SUBMIT, tmp_path) == "deny"
+    assert d("browser_snapshot", {}, SUBMIT, tmp_path) == "allow"  # it may still look and report
 
 
 # --- the queue the coordinator writes ------------------------------------------------------------
@@ -131,11 +153,14 @@ def test_queue_checks_before_anything_runs(tmp_path):
 # --- fill, card, submit --------------------------------------------------------------------------
 
 class Runner:
-    def __init__(self, text):
-        self.text, self.calls = text, []
+    """A fake run. `typed` is what its fill_form call puts into the form, through the real gate."""
+    def __init__(self, text, typed=(("First name", "Sam"), ("Model", "WM1234"))):
+        self.text, self.calls, self.typed = text, [], typed
 
     def __call__(self, prompt, **kw):
         self.calls.append((prompt, kw))
+        if self.typed and kw["env_extra"]["JUNO_BROWSER_RUN"] == "fill":
+            assert gate.decide(T + "browser_fill_form", _form(*self.typed), kw["env_extra"], kw["cwd"], "s") is None
         return claude_runner.RunResult(text=self.text, session_id="s", is_error=False)
 
 
@@ -178,6 +203,15 @@ def test_fill_run_is_its_own_lean_browser_run(tmp_path, cli):
     assert hooks["matcher"] == "mcp__playwright__.*" and hooks["hooks"][0]["args"][0].endswith("gate_browser.py")
 
 
+def test_card_shows_what_went_in_not_what_the_agent_said(tmp_path, cli):
+    run = Runner(FILLED, typed=(("First name", "Sam"), ("Medium", "true")))
+    entry, _ = browser_agent.fill(run, tmp_path, _req(tmp_path))
+    assert entry["fields"] == [{"label": "First name", "value": "Sam"}, {"label": "Medium", "value": "true"}]
+    assert not list((tmp_path / "state" / "browser").glob("gate-*.json"))
+    entry, line = browser_agent.fill(Runner(FILLED, typed=()), tmp_path, _req(tmp_path))
+    assert entry is None and "didn't take any values" in line
+
+
 def test_fill_stops_without_a_card_when_he_is_needed(tmp_path, cli):
     run = Runner(json.dumps({**json.loads(FILLED), "needs_michael": "a login"}))
     entry, line = browser_agent.fill(run, tmp_path, _req(tmp_path))
@@ -199,6 +233,32 @@ def test_process_turns_requests_into_cards(tmp_path, cli):
     assert browser_agent.process(Runner(FILLED), tmp_path, cards.append) == [] and len(cards) == 1  # once only
 
 
+def test_a_form_his_dm_named_submits_without_a_card(tmp_path, cli):
+    browser_queue.add(SITE + "/claim", "File the claim", browser_queue.parse_values(["First name=Sam"]),
+                      path=tmp_path / "state" / "browser-requests.json", named=True,
+                      env={"COORDINATOR_UNATTENDED": "0"})
+    done = json.dumps({"submitted": True, "confirmation": "Request complete.", "reference": "T-9"})
+
+    class Both(Runner):
+        def __call__(self, prompt, **kw):
+            self.text = FILLED if kw["env_extra"]["JUNO_BROWSER_RUN"] == "fill" else done
+            return super().__call__(prompt, **kw)
+
+    added, events, follow = [], [], []
+    lines = browser_agent.process(Both(FILLED), tmp_path, added.append, add_followup=lambda **kw: follow.append(kw),
+                                  audit=lambda event, entry, note: events.append(event))
+    req = browser_queue.load(tmp_path / "state" / "browser-requests.json")[0]
+    assert req["status"] == "submitted" and "Request complete" in lines[0] and follow
+    assert added[0]["status"] == "approved" and added[0]["auto"] == browser_agent.NAMED
+    assert events == ["auto_approved", "executed"]
+
+
+def test_named_only_from_a_dm(tmp_path):
+    with pytest.raises(browser_queue.Bad):
+        browser_queue.add(SITE, "claim", browser_queue.parse_values(["First name=Sam"]), path=tmp_path / "q.json",
+                          named=True, env={"COORDINATOR_UNATTENDED": "1"})
+
+
 def test_submit_claims_only_a_confirmed_submission(tmp_path, cli):
     entry, _ = browser_agent.fill(Runner(FILLED), tmp_path, _req(tmp_path))
     seen, follow = {}, []
@@ -212,11 +272,12 @@ def test_submit_claims_only_a_confirmed_submission(tmp_path, cli):
                                                       "reference": "C-123"})), tmp_path, entry,
                                     add_followup=lambda **kw: follow.append(kw))
     assert ok and "claim received" in line and "C-123" in line
-    assert seen["pass"]["approval_id"] == entry["id"] and seen["pass"]["values"] == ["Sam", "WM1234"]
+    assert seen["pass"]["approval_id"] == entry["id"]
+    assert seen["pass"]["fields"] == [{"field": "First name", "value": "Sam"}, {"field": "Model", "value": "WM1234"}]
     assert not (tmp_path / "state" / "browser" / "pass.json").exists()
     assert follow and follow[0]["match"] == "example,C-123"
     ok, line = browser_agent.submit(Runner(json.dumps({"submitted": True, "confirmation": ""})), tmp_path, entry)
-    assert not ok and "not sent" in line
+    assert not ok and "can't promise nothing reached" in line and "Nothing went in" not in line
     ok, line = browser_agent.submit(Runner(json.dumps({"submitted": False, "differs": "a new required field"})),
                                     tmp_path, entry)
     assert not ok and "a new required field" in line

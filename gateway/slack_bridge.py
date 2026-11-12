@@ -860,7 +860,11 @@ class Bridge:
     def fill_forms(self) -> list[str]:
         """Queued form requests → headless fill runs → cards (the approvals watcher posts them)."""
         import browser_agent
-        return browser_agent.process(self._run, self.root, self.approvals.append)
+        import followups
+        state = self.root / "state"
+        return browser_agent.process(self._run, self.root, self.approvals.append,
+                                     add_followup=lambda **kw: followups.add(**kw, path=state / "followups.json"),
+                                     audit=lambda event, entry, note: approval_policy.audit(state, event, entry, note))
 
     def handle_approval(self, approval_id: str, decision: str, *, user_id: str | None, auto: str | None = None) -> str:
         """A button was tapped (approved, always, denied), or an auto rule applies. Carries out or declines the action

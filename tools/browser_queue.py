@@ -73,8 +73,11 @@ def parse_values(raw: list[str]) -> list[dict]:
 
 
 def add(url: str, task: str, values: list[dict], sites: list[str] | None = None, why: str = "",
-        session_id: str | None = None, path: Path = PATH) -> dict:
+        session_id: str | None = None, path: Path = PATH, named: bool = False, env: dict | None = None) -> dict:
     gate = _gate()
+    env = os.environ if env is None else env
+    if named and env.get("COORDINATOR_UNATTENDED") == "1":
+        raise Bad("--named is only for a DM where Michael asked for this form himself; a timer run gets a card")
     origin = gate._origin(url)
     if origin is None:
         raise Bad("the form must be an https page")
@@ -92,6 +95,7 @@ def add(url: str, task: str, values: list[dict], sites: list[str] | None = None,
         raise Bad("--task says what the form is for")
     req = {"id": f"b-{uuid.uuid4().hex[:8]}", "url": url, "origins": origins, "task": task.strip()[:500],
            "values": values, "why": why.strip()[:300], "status": "new", "session_id": session_id,
+           "named": bool(named),
            "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     requests = load(path)
     requests.append(req)
@@ -108,15 +112,18 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--value", action="append", default=[])
     a.add_argument("--site", action="append", default=[], help="another https origin the form needs")
     a.add_argument("--why", default="")
+    a.add_argument("--named", action="store_true",
+                   help="Michael's own DM asked to submit this form on this site: submit without a card")
     a.add_argument("--session-id", default="", help="this session's id, so a Not now tap comes back here")
     sub.add_parser("list")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "add":
             req = add(args.url, args.task, parse_values(args.value), args.site, args.why,
-                      args.session_id or os.environ.get("CLAUDE_SESSION_ID") or None)
-            print(json.dumps({"id": req["id"], "status": "queued",
-                              "next": "The browser agent fills it; Michael gets a card before anything is submitted."}))
+                      args.session_id or os.environ.get("CLAUDE_SESSION_ID") or None, named=args.named)
+            print(json.dumps({"id": req["id"], "status": "queued", "next": (
+                "The browser agent fills and submits it, then Michael gets the result." if req["named"] else
+                "The browser agent fills it; Michael gets a card before anything is submitted.")}))
         else:
             print(json.dumps([{k: r.get(k) for k in ("id", "url", "status", "created")} for r in load()], indent=2))
     except Bad as exc:

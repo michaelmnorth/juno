@@ -9,8 +9,11 @@ or "submit" and the sites it may visit in JUNO_BROWSER_ORIGINS. Every Playwright
 - Buy, checkout, pay, place order, sign up and create account buttons are never pressed.
 - A fill run never submits: no Enter key, no type-and-submit, and once a value is in, no more clicks (checkboxes,
   radios and dropdowns go through browser_fill_form). It ends with what it filled; the bridge posts a card.
+- A fill run records what really went into each field (state/browser/gate-<session>.json); the card is built from
+  that record, not from the model's own report.
 - A submit run needs the one-time pass the bridge writes after Michael taps (state/browser/pass.json) for this exact
-  approval; it may type only the values the card showed.
+  approval. It may enter only the field and value pairs the card showed, presses nothing until every one of them is
+  in, and stops for good after a wrong value (so a click sent alongside a refused fill can't post an empty form).
 
 Anything outside a browser run (no JUNO_BROWSER_RUN) is denied: the Playwright server is never loaded elsewhere.
 """
@@ -132,29 +135,76 @@ def decide(tool_name: str, data: dict, env: dict, root: Path, session: str = "")
                     "Stop and say which field needs Michael.")
     if tool == "browser_click" and NEVER_CLICK.search(str(data.get("element") or "")):
         return "Blocked: buying, paying, logging in and making accounts are Michael's to do. Stop and say so."
-    pressed = str(data.get("key") or "").replace(" ", "").lower()
     gate = _gate_file(root, session)
+    state = _load(gate)
+    entries = _entries(tool, data)
     if mode == "fill":
-        if tool == "browser_press_key" and pressed in SUBMIT_KEYS:
+        if tool != "browser_click" and _submits(tool, data):  # clicks: allowed until a value is in (below)
             return "Blocked: a fill run never submits. Finish with the JSON of what you filled."
-        if tool == "browser_type" and data.get("submit"):
-            return "Blocked: a fill run never submits. Type without submit."
-        state = _load(gate)
-        if tool == "browser_click" and state.get("filled"):
+        if tool == "browser_click" and state.get("typed"):
             return ("Blocked: once a value is in, a fill run doesn't click (a click could submit). Set checkboxes, "
                     "radios and dropdowns with browser_fill_form, then finish with the JSON.")
-        if _entries(tool, data) and not state.get("filled"):
-            gate.parent.mkdir(parents=True, exist_ok=True)
-            gate.write_text(json.dumps({"filled": True}), encoding="utf-8")
+        if entries:  # what really went into the form: the card is built from this, not from the model's report
+            typed = {_norm(t["field"]): t for t in state.get("typed") or []}
+            for field, value in entries:
+                typed[_norm(field)] = {"field": field.strip()[:80], "value": value.strip()[:300]}
+            _save(gate, {**state, "typed": list(typed.values())})
         return None
+    reason, stop = _submit_decision(tool, data, entries, state, root, env)
+    if stop:
+        _save(gate, {**state, "stopped": True})  # a wrong value or no pass stops the run: no click may follow it
+    elif entries:
+        done = set(state.get("entered") or [])
+        done.update(_key(f, v) for f, v in entries)
+        _save(gate, {**state, "entered": sorted(done)})
+    return reason
+
+
+def _submits(tool: str, data: dict) -> bool:
+    pressed = str(data.get("key") or "").replace(" ", "").lower()
+    return (tool == "browser_click" or (tool == "browser_press_key" and pressed in SUBMIT_KEYS)
+            or (tool == "browser_type" and bool(data.get("submit"))))
+
+
+def _key(field: str, value: str) -> str:
+    return f"{_norm(field)}␟{_norm(value)}"
+
+
+def _same_field(a: str, b: str) -> bool:
+    a, b = _norm(a), _norm(b)
+    return bool(a and b) and (a == b or a in b or b in a)
+
+
+def _save(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+LOOK_ONLY = {"browser_snapshot", "browser_wait_for", "browser_take_screenshot", "browser_close"}
+
+
+def _submit_decision(tool: str, data: dict, entries: list, state: dict, root: Path,
+                     env: dict) -> tuple[str | None, bool]:
+    """(reason to refuse or None, whether the refusal stops the whole run)."""
     approved = load_pass(root, env.get("JUNO_BROWSER_PASS") or "")
     if approved is None:
-        return "Blocked: no valid one-time pass for this submission. Nothing was submitted."
-    allowed_values = {_norm(v) for v in approved.get("values") or []}
-    for _field, value in _entries(tool, data):
-        if _norm(value) not in allowed_values:
-            return "Blocked: that value wasn't on the card Michael approved. Don't submit; say what differs."
-    return None
+        return "Blocked: no valid one-time pass for this submission. Nothing was submitted.", True
+    if state.get("stopped") and tool not in LOOK_ONLY:
+        return "Blocked: an earlier step in this run was refused, so nothing more is entered or pressed.", True
+    pairs = [(str(p.get("field") or ""), str(p.get("value") or "")) for p in approved.get("fields") or []]
+    for field, value in entries:
+        if not any(_norm(value) == _norm(v) and _same_field(field, f) for f, v in pairs):
+            return ("Blocked: that field or value wasn't on the card Michael approved. Don't submit; say what "
+                    "differs."), True
+    if _submits(tool, data):
+        entered = set(state.get("entered") or [])
+        missing = [f for f, v in pairs
+                   if not any(k.split("␟")[1] == _norm(v) and _same_field(k.split("␟")[0], f)
+                              for k in entered)]
+        if missing:
+            return ("Blocked: not every approved value is in yet (" + ", ".join(missing[:5]) + "). Enter them first, "
+                    "one step at a time, then press the button."), False
+    return None, False
 
 
 def main() -> None:

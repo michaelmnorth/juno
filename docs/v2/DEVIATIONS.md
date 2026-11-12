@@ -193,3 +193,16 @@ from other hosts, so the hook checks every navigation itself. A submit run may p
 for nothing new (a claim form with an instructions page between the fields and the confirmation); a page that asks
 for anything new stops it. Michael's answers: every submit gets a card
 ("Always a card"); always headless. Rollback: remove the `browser_watcher` thread; queued requests just wait.
+
+## DV22 · A form his DM names submits without a card; the card shows what really went in (2026-11-12)
+
+Michael changed his answer after the first dry run ("full access, not blocked"; chosen: "Submit when I name it").
+`tools/browser_queue.py add --named` marks a request his own DM asked for on that site; the bridge fills it and
+submits it straight away, audited as `auto_approved` ("his DM named this form"), and posts the confirmation. A
+timer run can't set `--named`; any other form still gets a card. Payments, purchases, passwords, card and ID numbers
+stay blocked (T4, no credentials). Two fixes from the dry run on httpbin's test form: the card listed the agent's own
+report ("Pizza Size: Medium") while the form got a radio set to `true`, so the submit gate refused the value; and a
+click sent in the same batch as that refused fill posted an empty form. Now the gate records what each fill call
+puts in and the card and the pass are built from that record; a submit run presses nothing until every approved
+field and value is in, and a wrong value stops the run. The bridge no longer tells him "nothing went in" when it
+can't see the page.

@@ -117,8 +117,10 @@ def fill_prompt(req: dict) -> str:
 def submit_prompt(entry: dict) -> str:
     values = "\n".join(f"- {f['label']}: {f['value']}" for f in entry.get("fields") or [])
     return (f"Michael approved this submission.\nForm page: {entry['url']}\n"
-            f"Enter exactly these values (nothing else, nothing changed):\n{values}\n"
-            f"Then press the button labeled \"{entry['submit_label']}\" once. If the form now differs (new required "
+            "Enter exactly these field names and values, nothing else and nothing changed (true or false is a "
+            f"checkbox or radio set on or off):\n{values}\n"
+            "Use browser_fill_form with those exact names. One tool call at a time: the button is refused until "
+            f"every value is in. Then press the button labeled \"{entry['submit_label']}\" once. If the form now differs (new required "
             "fields, other choices, a login, a payment or a CAPTCHA), don't submit; say what differs. Later pages "
             "that ask for nothing new (instructions, a review page) you may press through with their Next, Continue "
             "or Submit button; a later page that asks for new information or a choice stops the run (say what it "
@@ -136,8 +138,10 @@ def _clean_fields(fields) -> list[dict]:
     return out[:browser_queue.MAX_VALUES]
 
 
-def card_entry(req: dict, result: dict) -> dict:
-    fields = _clean_fields(result.get("fields"))
+def card_entry(req: dict, result: dict, typed: list[dict] | None = None) -> dict:
+    # What the gate saw go into the form wins over the model's own report of it (the dry run of 2026-11-12: the
+    # report said "Pizza Size: Medium", the form got a radio set to true).
+    fields = _clean_fields([{"label": t.get("field"), "value": t.get("value")} for t in typed or []])
     site = re.sub(r"^https://", "", req["origins"][0])
     form = str(result.get("form") or "form").strip()[:80]
     url = str(result.get("url") or req["url"])
@@ -152,25 +156,36 @@ def card_entry(req: dict, result: dict) -> dict:
             "from_timer": False, "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
 
-def _cleanup(root: Path) -> None:
+def _cleanup(root: Path) -> list[dict]:
+    """Remove this run's gate files; returns what the gate recorded going into the form."""
+    typed = []
     for f in browser_dir(root).glob("gate-*.json"):
+        try:
+            typed += json.loads(f.read_text(encoding="utf-8")).get("typed") or []
+        except (OSError, ValueError):
+            pass
         f.unlink(missing_ok=True)
+    return typed
 
 
 def _run(run, root: Path, prompt: str, mode: str, origins: list[str], extra_env: dict | None = None):
+    """(result, what the gate recorded typed), or (None, []) when the browser isn't installed."""
     cli = find_cli()
     if cli is None:
-        return None
+        return None, []
     mcp, settings = write_configs(root, origins, cli)
     turns, dollars = ping_policy.JOB_LIMITS["browser"]
     env = {"JUNO_BROWSER_RUN": mode, "JUNO_BROWSER_ORIGINS": ",".join(origins), **(extra_env or {})}
+    _cleanup(root)
+    result, typed = None, []
     try:
-        return run(prompt, cwd=root, unattended=True, allowed_tools=TOOLS, env_extra=env, max_turns=turns,
-                   max_budget_usd=dollars, job="browser", model=ping_policy.DM_MODEL, effort=ping_policy.DM_EFFORT,
-                   lean_system=PERSONA.read_text(encoding="utf-8"),
-                   mcp_config=mcp, settings_file=settings)
+        result = run(prompt, cwd=root, unattended=True, allowed_tools=TOOLS, env_extra=env, max_turns=turns,
+                     max_budget_usd=dollars, job="browser", model=ping_policy.DM_MODEL, effort=ping_policy.DM_EFFORT,
+                     lean_system=PERSONA.read_text(encoding="utf-8"),
+                     mcp_config=mcp, settings_file=settings)
     finally:
-        _cleanup(root)
+        typed = _cleanup(root)
+    return result, typed
 
 
 NOT_INSTALLED = ("The browser isn't set up on this PC yet, so I couldn't open that form. Michael installs it once "
@@ -179,7 +194,7 @@ NOT_INSTALLED = ("The browser isn't set up on this PC yet, so I couldn't open th
 
 def fill(run, root: Path, req: dict) -> tuple[dict | None, str]:
     """Returns (approval entry, "") or (None, a line for Michael)."""
-    result = _run(run, root, fill_prompt(req), "fill", req["origins"])
+    result, typed = _run(run, root, fill_prompt(req), "fill", req["origins"])
     if result is None:
         return None, NOT_INSTALLED
     out = last_json(result.text) or {}
@@ -190,13 +205,17 @@ def fill(run, root: Path, req: dict) -> tuple[dict | None, str]:
         missing = ", ".join(str(m) for m in out.get("missing") or [])[:200]
         why = need or (f"it still needs: {missing}" if missing else "the form didn't come out right")
         return None, f"I filled what I could on {req['origins'][0].replace('https://', '')}, but {why}. Nothing was submitted. 👀"
-    return card_entry(req, out), ""
+    if not typed:
+        return None, (f"The form on {req['origins'][0].replace('https://', '')} didn't take any values, so there's "
+                      "nothing to submit. 🙃")
+    return card_entry(req, out, typed), ""
 
 
 def write_pass(root: Path, entry: dict) -> Path:
     path = browser_dir(root) / "pass.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"approval_id": entry["id"], "values": [f["value"] for f in entry.get("fields") or []],
+    path.write_text(json.dumps({"approval_id": entry["id"],
+                                "fields": [{"field": f["label"], "value": f["value"]} for f in entry.get("fields") or []],
                                 "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}),
                     encoding="utf-8")
     return path
@@ -206,8 +225,8 @@ def submit(run, root: Path, entry: dict, add_followup=None, today: date | None =
     """Carry out an approved web.form.submit. Returns (submitted, a line for Michael)."""
     path = write_pass(root, entry)
     try:
-        result = _run(run, root, submit_prompt(entry), "submit", entry.get("origins") or [f"https://{entry['site']}"],
-                      {"JUNO_BROWSER_PASS": entry["id"]})
+        result, _ = _run(run, root, submit_prompt(entry), "submit",
+                         entry.get("origins") or [f"https://{entry['site']}"], {"JUNO_BROWSER_PASS": entry["id"]})
     finally:
         path.unlink(missing_ok=True)
     if result is None:
@@ -216,9 +235,11 @@ def submit(run, root: Path, entry: dict, add_followup=None, today: date | None =
     confirmation = re.sub(r"\s+", " ", str(out.get("confirmation") or "")).strip()[:200]
     if result.is_error or not out.get("submitted") or not confirmation:
         differs = str(out.get("differs") or "").strip()[:200]
-        return False, (f"Didn't submit on {entry['site']}: {differs}. Nothing went in. 🙃" if differs else
-                       f"I couldn't confirm the form on {entry['site']} went through, so treat it as not sent. "
-                       "I'll check if you want to try again. 🙃")
+        # Never "nothing went in": the bridge can't see the page, only what the agent says (2026-11-12 dry run).
+        return False, (f"Stopped on {entry['site']} without a confirmation: {differs}. I can't promise nothing "
+                       "reached them, so check before trying again. 🙃" if differs else
+                       f"I couldn't confirm the form on {entry['site']} went through. I can't promise nothing reached "
+                       "them, so check before trying again. 🙃")
     ref = re.sub(r"[^A-Za-z0-9 #-]", "", str(out.get("reference") or ""))[:40].strip()
     if add_followup is not None:
         due = (today or date.today()) + timedelta(days=14)
@@ -230,14 +251,30 @@ def submit(run, root: Path, entry: dict, add_followup=None, today: date | None =
                   + (f" Reference {ref}." if ref else "") + " I'll watch for their answer. 🫡")
 
 
-def process(run, root: Path, approvals_add, path: Path | None = None) -> list[str]:
-    """New requests → fill runs → cards. Returns lines to post to Michael for requests that couldn't reach a card."""
+NAMED = "his DM named this form"
+
+
+def process(run, root: Path, approvals_add, path: Path | None = None, add_followup=None,
+            audit=None) -> list[str]:
+    """New requests → fill runs → cards, or straight to the submit run when his own DM named the form (Michael
+    2026-11-12). Returns lines to post to Michael: results of named submits, and requests that couldn't go on."""
     path = path or root / "state" / "browser-requests.json"
     lines = []
     for req in [r for r in browser_queue.load(path) if r.get("status") == "new"]:
         browser_queue.update(req["id"], path, status="filling")
         entry, line = fill(run, root, req)
-        if entry:
+        if entry and req.get("named"):
+            entry.update(status="approved", auto=NAMED)
+            approvals_add(entry)
+            if audit:
+                audit("auto_approved", entry, NAMED)
+            ok, line = submit(run, root, entry, add_followup=add_followup)
+            if audit:
+                audit("executed" if ok else "submit_stopped", entry, line[:200])
+            browser_queue.update(req["id"], path, status="submitted" if ok else "stopped", approval_id=entry["id"],
+                                 note=line[:200])
+            lines.append(line)
+        elif entry:
             approvals_add(entry)
             browser_queue.update(req["id"], path, status="carded", approval_id=entry["id"])
         else:

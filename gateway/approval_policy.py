@@ -226,6 +226,9 @@ def who_line(addr: str, root: Path, history=_mail_history) -> str:
     return f"{_ordinal(count)} email" + (", you've replied before" if replied else ", no reply yet")
 
 
+ON_OFF = {"true": "on (checked)", "false": "off"}
+
+
 def _plain(value) -> str:
     """Text a web page had a hand in (form labels, the button): Slack's escapes, so it can't become a link or a
     mention on the card."""
@@ -311,7 +314,7 @@ def blocks(entry: dict, trust_label: str | None = None, root: Path | None = None
     facts = [_field("What", entry.get("action", ""))]
     if cls == "web.form.submit":
         facts.append(_field("Site", f"{_plain(entry.get('site'))}\n{_plain(entry.get('url'))}"))
-        values = "\n".join(f"{_plain(f.get('label'))}: {_plain(f.get('value'))}"
+        values = "\n".join(f"{_plain(f.get('label'))}: {_plain(ON_OFF.get(str(f.get('value')).lower(), f.get('value')))}"
                            for f in entry.get("fields") or []) or "(none)"
         facts.append(_field("Values", values[:FIELDS_MAX]))
         facts.append(_field("Button", _plain(entry.get("submit_label"))))
