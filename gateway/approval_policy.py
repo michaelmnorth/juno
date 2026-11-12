@@ -279,6 +279,8 @@ def blocks(entry: dict, trust_label: str | None = None, root: Path | None = None
         to = "\n".join(who) or "(see draft)"
         whos = "\n".join(who_line(a, root) for a in who) or "-"
         fields = [_field("To", to), _field("Who", whos), _field("Subject", entry.get("subject", ""))]
+        if entry.get("attachments"):
+            fields.append(_field("Attached", "\n".join(str(a) for a in entry["attachments"])))
         if entry.get("why"):  # plain words from Juno; `action` is the instruction for the run, never shown here
             fields.append(_field("Why", entry["why"]))
         out = [{"type": "section", "text": {"type": "mrkdwn", "text": f"*{entry['summary']}*"}},

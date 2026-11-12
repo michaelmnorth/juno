@@ -335,3 +335,77 @@ def test_router_knows_research():
     from v2 import router
     assert "research" in router.PLAYBOOKS and "research (look into" in router.SYSTEM
     assert (ROOT / "v2" / "playbooks" / "research" / "SKILL.md").exists()
+
+
+# --- 6. shopping skill and attachments on drafts -------------------------------------------------------------------
+
+def _raw_of(call_log):
+    import base64
+    import email as em
+    raw = call_log[-1][3]["message"]["raw"]
+    return em.message_from_bytes(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
+
+
+def test_draft_attaches_project_files_and_logs_them(tmp_path):
+    import gmail
+    (tmp_path / "state" / "outbox").mkdir(parents=True)
+    (tmp_path / "state" / "outbox" / "write-up.md").write_text("# Notes", encoding="utf-8")
+    calls = []
+    call = lambda m, u, t, body=None, params=None: calls.append((m, u, t, body)) or {"id": "D1", "message": {
+        "id": "M1", "threadId": "T1"}}
+    out = gmail.draft(["me@example.com"], [], "Write-up", "Attached.\n", token="t", call=call,
+                      get=lambda *a, **k: {}, log=tmp_path / "drafts.jsonl", with_signature=False,
+                      attach=["state/outbox/write-up.md"], root=tmp_path, context="self (Michael)")
+    assert out["attachments"] == ["write-up.md"]
+    msg = _raw_of(calls)
+    assert gmail.attachment_names(msg) == ["write-up.md"]
+    assert json.loads((tmp_path / "drafts.jsonl").read_text(encoding="utf-8"))["attachments"] == ["write-up.md"]
+
+
+def test_attach_refuses_outside_hidden_secret_and_big_files(tmp_path):
+    import gmail
+    from google_read import GoogleError
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "x.md").write_text("x", encoding="utf-8")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "google.env").write_text("x", encoding="utf-8")
+    (tmp_path / "token_store.txt").write_text("x", encoding="utf-8")
+    big = tmp_path / "big.pdf"
+    big.write_bytes(b"0" * (10 * 1024 * 1024 + 1))
+    outside = tmp_path.parent / "outside.txt"
+    outside.write_text("x", encoding="utf-8")
+    for bad in [str(outside), "../outside.txt", ".claude/x.md", "tools/google.env", "token_store.txt", "big.pdf",
+                "missing.md"]:
+        try:
+            gmail.check_attachments([bad], tmp_path)
+        except GoogleError:
+            continue
+        raise AssertionError(f"attached {bad}")
+
+
+def test_send_refuses_when_attachments_differ_from_the_card(tmp_path):
+    import base64
+    import gmail
+    (tmp_path / "a.md").write_text("x", encoding="utf-8")
+    raw = gmail.build_raw(["sam@example.com"], [], "Hi", "Here it is.\n", files=[tmp_path / "a.md"])
+    get = lambda url, token, params=None: {"message": {"raw": raw}}
+    sent = []
+    call = lambda *a, **k: sent.append(a) or {"id": "S1"}
+    out = gmail.send_approved("D1", "sam@example.com", "Here it is.", token="t", call=call, get=get)
+    assert out == {"sent": False, "why": "attachments changed", "current_text": "Here it is."} and not sent
+    out = gmail.send_approved("D1", "sam@example.com", "Here it is.", token="t", call=call, get=get,
+                              attachments=["a.md"])
+    assert out["sent"] and sent
+
+
+def test_send_card_lists_attachments():
+    from approval_policy import blocks
+    entry = {"id": "a-1", "action_class": "email.send", "summary": "Send the write-up", "to": "me@example.com",
+             "subject": "x", "draft_text": "hi", "attachments": ["write-up.md"]}
+    text_ = json.dumps(blocks(entry, "michael"))
+    assert "Attached" in text_ and "write-up.md" in text_
+
+
+def test_shopping_skill_reads_prices_on_the_page_and_never_buys():
+    skill = (ROOT / ".claude" / "skills" / "shopping" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Free first" in skill and "product page" in skill and "never buys" in skill.lower()

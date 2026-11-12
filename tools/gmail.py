@@ -8,6 +8,8 @@ What it can't do, on purpose: send to anyone but Michael, trash, archive, touch 
                               [--context "friend (Sam)"]
       New draft, or a reply in the thread of MSG_ID (threading headers set, "Re:" added). With --context it also
       writes the state/drafts.jsonl line the sweep uses. Prints {"draft_id", "message_id", "thread_id", "link"}.
+      --attach PATH (repeatable): files inside the project, up to 5 and 10 MB together, never hidden or secret
+      files. Prints "attachments"; a Send card for the draft must list them, or the send is refused.
   python tools/gmail.py update-draft --id DRAFT_ID --body-file path|- [--subject "..."]
       Same recipients and thread, new text. Refused inside an approved send run.
   python tools/gmail.py send-self --id DRAFT_ID
@@ -107,8 +109,50 @@ def html_to_text(markup: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
 
+OUT_MAX = 10 * 1024 * 1024  # all attachments on one draft together
+OUT_FILES = 5
+SECRETISH = re.compile(r"(?i)(\.(env|key|pem|p12|pfx|kdbx)$|token|secret|credential|password)")
+
+
+def check_attachments(paths: list[str], root: Path | None = None) -> list[Path]:
+    """Files Juno may attach to a draft: inside the project, not hidden (.git, .claude, .env), not secret-looking,
+    at most 5 and 10 MB together (P2 brief, #11)."""
+    root = (root or ROOT).resolve()
+    out, total = [], 0
+    for raw in paths:
+        p = Path(raw).resolve() if Path(raw).is_absolute() else (root / raw).resolve()
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            raise _bad(f"attachments must be inside the project: {raw!r}")
+        if any(part.startswith(".") for part in rel.parts) or SECRETISH.search(rel.as_posix()):
+            raise _bad(f"not a file Juno attaches: {rel.as_posix()!r}")
+        if not p.is_file():
+            raise _bad(f"no such file: {rel.as_posix()!r}")
+        total += p.stat().st_size
+        out.append(p)
+    if len(out) > OUT_FILES:
+        raise _bad(f"at most {OUT_FILES} attachments")
+    if total > OUT_MAX:
+        raise _bad("attachments are over 10 MB together")
+    return out
+
+
+def _attach(msg: EmailMessage, files: list[Path]) -> None:
+    import mimetypes
+    for f in files:
+        kind = "text/markdown" if f.suffix.lower() == ".md" else (mimetypes.guess_type(f.name)[0]
+                                                                   or "application/octet-stream")
+        main, sub = kind.split("/", 1)
+        msg.add_attachment(f.read_bytes(), maintype=main, subtype=sub, filename=f.name)
+
+
+def attachment_names(msg) -> list[str]:
+    return sorted(part.get_filename() for part in msg.walk() if part.get_filename())
+
+
 def build_raw(to: list[str], cc: list[str], subject: str, body: str, in_reply_to: str = "",
-              references: str = "", sig: str = "") -> str:
+              references: str = "", sig: str = "", files: list[Path] | None = None) -> str:
     msg = EmailMessage()
     if FROM:
         msg["From"] = FROM
@@ -126,6 +170,7 @@ def build_raw(to: list[str], cc: list[str], subject: str, body: str, in_reply_to
                             subtype="html")
     else:
         msg.set_content(body)
+    _attach(msg, files or [])
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
 
@@ -164,9 +209,10 @@ def recent_draft(thread_id: str, log: Path = DRAFTS_LOG, now: datetime | None = 
 
 def draft(to: list[str], cc: list[str], subject: str, body: str, reply_to: str = "", context: str = "",
           token: str | None = None, call=None, get=None, log: Path = DRAFTS_LOG, with_signature: bool = True,
-          again: bool = False) -> dict:
+          again: bool = False, attach: list[str] | None = None, root: Path | None = None) -> dict:
     call, get = call or google_read.call, get or google_read._get
     to, cc = check_recipients(to), (check_recipients(cc) if cc else [])
+    files = check_attachments(attach or [], root)
     token = token or google_read.access_token()
     thread_id, in_reply_to, references = "", "", ""
     if reply_to:
@@ -183,18 +229,21 @@ def draft(to: list[str], cc: list[str], subject: str, body: str, reply_to: str =
     if not subject.strip():
         raise _bad("a --subject (or --reply-to to take the thread's)")
     sig = signature(token, get) if with_signature else ""
-    message = {"raw": build_raw(to, cc, subject, body, in_reply_to, references, sig)}
+    message = {"raw": build_raw(to, cc, subject, body, in_reply_to, references, sig, files)}
     if thread_id:
         message["threadId"] = thread_id
     made = call("POST", f"{GMAIL}/drafts", token, {"message": message})
     msg = made.get("message", {})
     out = {"draft_id": made.get("id", ""), "message_id": msg.get("id", ""),
            "thread_id": msg.get("threadId", thread_id), "link": link(msg.get("id", ""))}
+    if files:
+        out["attachments"] = sorted(f.name for f in files)  # the Send card lists these (its `attachments`)
     if context:
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"draft_id": out["draft_id"], "thread_id": out["thread_id"], "to": ", ".join(to),
-                                 "context": context[:200], "created": _now(), "draft_text": body.strip()},
+                                 "context": context[:200], "created": _now(), "draft_text": body.strip(),
+                                 **({"attachments": out["attachments"]} if files else {})},
                                 ensure_ascii=False) + "\n")
     return out
 
@@ -256,7 +305,8 @@ def _plain_body(msg) -> str:
     return ""
 
 
-def send_approved(draft_id: str, to: str, draft_text: str, token: str | None = None, call=None, get=None) -> dict:
+def send_approved(draft_id: str, to: str, draft_text: str, token: str | None = None, call=None, get=None,
+                  attachments: list[str] | None = None) -> dict:
     """Send the draft Michael approved, in code, only if it still is what his card showed: the same recipients and
     the same text (plus his signature). Anything else changed it after the card, so nothing is sent and the caller
     shows him the current version instead (docs/v2/05-SECURITY.md control 3). Returns {"sent": True, ...} or
@@ -271,6 +321,8 @@ def send_approved(draft_id: str, to: str, draft_text: str, token: str | None = N
     body = _norm(_plain_body(msg))
     if not approved or people != approved:
         return {"sent": False, "why": "recipients changed", "current_text": body}
+    if attachment_names(msg) != sorted(attachments or []):  # the card lists what is attached; nothing else goes
+        return {"sent": False, "why": "attachments changed", "current_text": body}
     expected = _norm(draft_text)
     if body != expected and body != _norm(draft_text.rstrip("\n") + "\n\n" + html_to_text(signature(token, get))):
         return {"sent": False, "why": "text changed", "current_text": body}
@@ -407,6 +459,7 @@ def parser() -> argparse.ArgumentParser:
     d.add_argument("--context", default="")
     d.add_argument("--no-signature", action="store_true")
     d.add_argument("--again", action="store_true")
+    d.add_argument("--attach", action="append", default=[])
     u = sub.add_parser("update-draft")
     u.add_argument("--id", required=True)
     u.add_argument("--body-file", required=True)
@@ -442,7 +495,8 @@ def main(argv: list[str]) -> int:
         google_read.load_secrets()
         if args.cmd == "draft":
             out = draft(_split(args.to), _split(args.cc), args.subject, read_body(args.body_file), args.reply_to,
-                        args.context, with_signature=not args.no_signature, again=args.again)
+                        args.context, with_signature=not args.no_signature, again=args.again,
+                        attach=args.attach)
         elif args.cmd == "update-draft":
             out = update_draft(args.id, read_body(args.body_file), args.subject,
                                with_signature=not args.no_signature)

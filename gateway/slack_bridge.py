@@ -564,11 +564,11 @@ def load_automation(root: Path = ROOT) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def _gmail_send_approved(draft_id: str, to: str, draft_text: str) -> dict:
+def _gmail_send_approved(draft_id: str, to: str, draft_text: str, attachments: list[str] | None = None) -> dict:
     import gmail
     import google_read
     google_read.load_secrets()
-    return gmail.send_approved(draft_id, to, draft_text)
+    return gmail.send_approved(draft_id, to, draft_text, attachments=attachments)
 
 
 # --- core behaviors (Slack-independent, testable) -------------------------------------------------
@@ -818,7 +818,9 @@ class Bridge:
         try:
             to = entry.get("to") or ""
             to = ", ".join(to) if isinstance(to, list) else str(to)
-            out = (self.send_email or _gmail_send_approved)(entry.get("draft_id", ""), to, entry.get("draft_text", ""))
+            files = {"attachments": entry["attachments"]} if entry.get("attachments") else {}
+            out = (self.send_email or _gmail_send_approved)(entry.get("draft_id", ""), to, entry.get("draft_text", ""),
+                                                            **files)
         except Exception as exc:
             self.approvals.mark(entry["id"], "failed")
             approval_policy.audit(state, "send_failed", entry, type(exc).__name__)

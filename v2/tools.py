@@ -249,7 +249,8 @@ def p_send(b, a):
     d = b.draft_info(a["draft_id"])
     return {"action_class": "email.send", "summary": f"Send your reply to {d['to']}: {d['subject']}",
             "action": f"Send the draft to {d['to']}", "draft_id": a["draft_id"], "to": d["to"],
-            "subject": d["subject"], "draft_text": d["text"], "draft_link": d.get("link", "")}
+            "subject": d["subject"], "draft_text": d["text"], "draft_link": d.get("link", ""),
+            **({"attachments": list(d["attachments"])} if d.get("attachments") else {})}
 
 
 # --- the registry ------------------------------------------------------------------------------------------------

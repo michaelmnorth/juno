@@ -123,7 +123,7 @@ class RealBackend:
         msg = email.message_from_bytes(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
         to = ", ".join(a for _, a in getaddresses(msg.get_all("To", [])) if a)
         return {"to": to, "subject": str(msg.get("Subject", "")), "text": gmail._norm(gmail._plain_body(msg)),
-                "link": gmail.link(got.get("id", ""))}
+                "link": gmail.link(got.get("id", "")), "attachments": gmail.attachment_names(msg)}
 
     # --- people -------------------------------------------------------------------------------------------------
     def people(self, name: str) -> list[dict]:
