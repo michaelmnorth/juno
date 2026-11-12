@@ -51,6 +51,11 @@ Exit early and quietly when there is nothing new. A sweep that finds nothing wri
    --section "Life now" --source "mail YYYY-MM-DD"`. A match `by: contacts` (no profile yet): `python
    tools/people_queue.py add --new <email> --source "mail YYYY-MM-DD"` (once; it ignores repeats). Facts, not tone; no health
    or money details. Michael saves them with one tap; nothing goes into `people/` without it.
+4d. **Follow-ups.** If `python tools/followups.py list` shows open ones, write the `sorted` and `unclear` lists from
+   step 2 to `state/followup-mail.json` and run `python tools/followups.py match --items-file state/followup-mail.json`.
+   For each hit, judge from the subject (and Sorter's gist) whether it closes the follow-up (delivered, refunded,
+   decided) or only moves it (shipped: say so in the ping). Close with `python tools/followups.py close --id <id>
+   --how "<what happened, date>"`. A closed one goes in the ping as one line; an overdue one waits for the brief.
 5. **Reminders.** Any reminder in `state/reminders.yaml` due before the next sweep goes into the ping.
    **On time (Michael 2026-11-07).** Read today's calendar. For any event with a location that starts before the next
    sweep plus 90 minutes, put a leave-by line in the ping (start time, place, when to leave, with travel time stated

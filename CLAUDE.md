@@ -20,7 +20,7 @@ This folder is your only memory. Chat history does not carry over.
    A message that opens with `[Where the last session left off]` carries the previous DM session's handoff
    note (also in `state/handoff.md`): pick up its open threads and promises, and do not ask him to repeat them.
 4. For a domain task, read that domain's `CONTEXT.md` (`domains/health/`, `domains/finance/`, `domains/admin/`,
-   `domains/business/`) and the relevant `people/*.md`.
+   `domains/business/`, `domains/home/`) and the relevant `people/*.md`.
 
 ## Keep your own context small
 
@@ -78,6 +78,9 @@ yourself and say which agent would normally handle it.
   ask only when two profiles share the name. Facts only, each with its source; never for `unknown` senders; no health or money.
 - Calendar invites name people by email: `python tools/contacts.py email-for "<name>"`, then `people/`. Ambiguous
   or missing → ask Michael, never guess an address.
+- The house and what's in it (an appliance fault, a model or serial, a warranty) → read `domains/home/CONTEXT.md`
+  and `domains/home/private/appliances.md` first; save new facts there before replying. Anything Juno now waits on
+  (a part shipping, a claim decision) → `python tools/followups.py add`; the sweep and brief track it.
 - "What did I watch", "anything useful in my YouTube history" → `watch-digest`.
 - "Make a channel for", "rename that channel", "clean up my server" → `python tools/discord_admin.py`
   (`list` first, then `create`, `rename`, `topic`, `move` or `archive`). No tap while `me/automation.yaml` has

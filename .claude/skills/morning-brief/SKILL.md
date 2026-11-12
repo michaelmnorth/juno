@@ -14,7 +14,9 @@ Build one phone-sized message. Read before writing: `me/schedule.md`, `me/proact
    For people: `python tools/people_match.py --attendees "<emails, comma separated>" --title "<event title>"`;
    for each match, one line from that profile (last contact, an open thread, one thing to ask about).
 2. **Due.** Reminders due today or overdue; bills and subscriptions with a due date in the next 3 days (from the latest
-   finance log); estimated-tax date within 14 days; anything in `pending-approvals` older than 24 h.
+   finance log); estimated-tax date within 14 days; anything in `pending-approvals` older than 24 h. Follow-ups:
+   `python tools/followups.py list`; one line for each overdue one (what it waits on, the expect-by date, the
+   next step, like "no shipping mail yet; want me to check the claim status?") and for each due today.
 3. **Mail.** Sweeps stop at 21:00, so the brief reads the overnight mail itself: run the `sweep` skill's steps 2
    to 4 (`python tools/inbox.py new`, Sorter for the unclear ones, drafts for reply-needed), with no ping; the
    brief is the message. Update `state/processed.json` the same way. In the brief: replies drafted (one line; the

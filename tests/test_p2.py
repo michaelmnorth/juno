@@ -227,3 +227,52 @@ def test_reader_schema_has_the_order_fields_and_a_narrow_suspicious():
     assert {"merchant", "order_number", "order_date", "items", "delivered_on"} <= set(props)
     assert set(lanes.READER_SCHEMA["required"]) == set(props)
     assert "not" in props["suspicious"]["description"]
+
+
+# --- 4. home domain and follow-ups ----------------------------------------------------------------------------------
+
+def test_followups_add_list_match_close(tmp_path):
+    from datetime import date
+    import followups as fu
+    path = tmp_path / "f.json"
+    today = date(2026, 11, 12)
+    a = fu.add("Replacement drain pump ships", "2026-11-20", "shipping mail from the maker", "LG, drain pump",
+               "claim 2026-11-12", path=path, today=today)
+    fu.add("Refund lands", "2026-11-14", "refund mail", "refund,acme", path=path, today=today)
+    assert a["id"].startswith("f-") and a["match"] == ["lg", "drain pump"]
+    rows = fu.listing(path, today=date(2026, 11, 16))
+    assert [r["what"] for r in rows] == ["Refund lands", "Replacement drain pump ships"]
+    assert [r["what"] for r in fu.listing(path, overdue=True, today=date(2026, 11, 16))] == ["Refund lands"]
+    inbox = {"sorted": [{"id": "m1", "from": "LG Parts <parts@lg.example>", "subject": "Your order has shipped"},
+                        {"id": "m2", "from": "news@glgx.example", "subject": "Weekly deals"}],
+             "unclear": [{"id": "m3", "from": "x@y.example", "subject": "About your drain pump"}]}
+    hits = fu.match(fu._mail_items(json.dumps(inbox)), path)
+    assert [h["message_id"] for h in hits] == ["m1", "m3"]  # "lg" is a whole word only, so glgx is no match
+    done = fu.close(a["id"], "Shipped 2026-11-15, delivered 2026-11-18", path)
+    assert done["how"].startswith("Shipped") and not [r for r in fu.listing(path) if r["id"] == a["id"]]
+    assert fu.listing(path, every=True, today=today)[-1]["id"] == a["id"]
+
+
+def test_followups_refuse_bad_input(tmp_path):
+    from datetime import date
+    import followups as fu
+    path = tmp_path / "f.json"
+    for args in [("x", "2026-13-01", "y", "abc"), ("x", "2026-11-01", "y", "abc"), ("x", "2026-11-20", "y", "a,b"),
+                 ("", "2026-11-20", "y", "abc")]:
+        try:
+            fu.add(*args, path=path, today=date(2026, 11, 12))
+        except fu.Bad:
+            continue
+        raise AssertionError(f"accepted {args}")
+    assert fu.main(["close", "--id", "f-nope", "--how", "x"]) == fu.BAD_INPUT
+
+
+def test_sweep_and_brief_use_followups_and_home_domain_is_routed():
+    sweep = (ROOT / ".claude" / "skills" / "sweep" / "SKILL.md").read_text(encoding="utf-8")
+    brief = (ROOT / ".claude" / "skills" / "morning-brief" / "SKILL.md").read_text(encoding="utf-8")
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "followups.py match" in sweep and "followups.py close" in sweep
+    assert "followups.py list" in brief
+    assert "domains/home/private/appliances.md" in claude and "followups.py add" in claude
+    example = (ROOT / "domains" / "home" / "CONTEXT.example.md").read_text(encoding="utf-8")
+    assert "private/appliances.md" in example
