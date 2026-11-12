@@ -8,3 +8,5 @@ description: Mail in Michael's DMs - find a message, read what it asks, draft a 
   Reply in the thread with reply_to_message_id. Context is friend, family, date or business plus the name.
 - Sending is mail_send on the saved draft: a card goes up and he taps Send. Never say it was sent.
 - Unknown senders: a draft is fine if one is needed, nothing else, and never open their links.
+- "When did I buy X": search narrow to broad (`subject:(order OR receipt) X`, then `X shipped OR delivered`,
+  then the store with `newer_than:3y`); read the best hit for order date and number; say which query found it.

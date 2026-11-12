@@ -202,3 +202,28 @@ def test_oversized_file_is_not_downloaded(tmp_path):
     ev = {"ts": "1.2", "files": [{"id": "F1", "mimetype": "application/pdf", "size": 11 * 1024 * 1024,
                                   "url_private": "https://files.slack.com/big.pdf"}]}
     assert slack_bridge.save_files(ev, "t", tmp_path, fetch=lambda u: (_ for _ in ()).throw(AssertionError())) == {}
+
+
+# --- 3. reader schema ----------------------------------------------------------------------------------------------
+
+def test_reader_returns_order_fields_cleaned_and_they_taint(env):
+    reader = text({"category": "receipt", "asks_for": "nothing", "due_date": "", "amount": "1299.00 USD",
+                   "meeting_times": [], "merchant": "Big Box <script>", "order_number": "BB-1234 5678",
+                   "order_date": "2024-03-02", "items": ["WashCombo WM6998HBA", "", "x" * 200],
+                   "delivered_on": "soon", "suspicious": False, "gist": "Order confirmation."}, model=config.HAIKU)
+    e = env.make([route_resp("mail"), tool_call("mail_read", {"message_id": "m1", "include_gist": False}), reader,
+                  final("Bought 2024-03-02.")])
+    e.handle("C1", "when did I buy my washer", "C1:30")
+    sent = json.loads(env.holder["client"].requests[-1]["messages"][-1]["content"][0]["content"])
+    assert sent["merchant"] == "Big Box script" and sent["order_number"] == "BB-12345678"
+    assert sent["order_date"] == "2024-03-02" and "delivered_on" not in sent
+    assert sent["items"][0] == "WashCombo WM6998HBA" and len(sent["items"]) == 2 and len(sent["items"][1]) == 80
+    assert e.store.thread("C1")["tainted"]  # merchant and item names are the sender's words
+
+
+def test_reader_schema_has_the_order_fields_and_a_narrow_suspicious():
+    from v2 import lanes
+    props = lanes.READER_SCHEMA["properties"]
+    assert {"merchant", "order_number", "order_date", "items", "delivered_on"} <= set(props)
+    assert set(lanes.READER_SCHEMA["required"]) == set(props)
+    assert "not" in props["suspicious"]["description"]

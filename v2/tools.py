@@ -9,6 +9,7 @@ Only the tools DMs use are ported (P1 brief, deliverable 2). Health, YouTube, fi
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Literal
@@ -153,6 +154,7 @@ def h_mail_read(b, a, ctx):
     fields["from"] = msg.get("from", "")
     fields["trust"] = b.trust(msg.get("from", ""))
     gist = fields.pop("gist", "")
+    sender_text = _order_fields(fields)
     if msg.get("attachments"):  # types and sizes only, from code: a file name is the sender's text
         fields["attachments"] = [{"type": str(x.get("type", ""))[:60], "kb": int(x.get("kb", 0))}
                                  for x in msg["attachments"][:10]]
@@ -160,8 +162,29 @@ def h_mail_read(b, a, ctx):
                                       "the full assistant can open it.")
     if a.get("include_gist"):
         fields["gist"] = gist  # free text: taints the run
-    return ToolResult(fields, untrusted_text=bool(a.get("include_gist")),
+    return ToolResult(fields, untrusted_text=bool(a.get("include_gist")) or sender_text,
                       touched=[{"kind": "message", "id": a["message_id"], "label": f"from {fields['from']}"[:80]}])
+
+
+_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _order_fields(fields: dict) -> bool:
+    """Order fields from the reader (P2 brief, #6), cleaned in code: dates must be dates, the order number a plain
+    token, the merchant and items short plain strings. Merchant and item names are the sender's words, so they taint
+    the run like the gist does. Returns True when any of those is present. Empty fields are dropped."""
+    for key in ("order_date", "delivered_on"):
+        if not _DAY.match(str(fields.get(key, ""))):
+            fields.pop(key, None)
+    num = re.sub(r"[^A-Za-z0-9-]", "", str(fields.get("order_number", "")))[:40]
+    fields["order_number"] = num
+    merchant = re.sub(r"[^\w .,&'()-]", "", str(fields.get("merchant", "")))[:60].strip()
+    items = [re.sub(r"[^\w .,&'()/#+-]", "", str(i))[:80].strip() for i in (fields.get("items") or [])[:5]]
+    fields["merchant"], fields["items"] = merchant, [i for i in items if i]
+    for key in ("order_number", "merchant", "items"):
+        if not fields.get(key):
+            fields.pop(key, None)
+    return bool(fields.get("merchant") or fields.get("items"))
 
 
 def h_mail_draft(b, a, ctx):
