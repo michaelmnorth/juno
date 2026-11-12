@@ -75,3 +75,25 @@ These are the questions Michael asked while we built the sync. They make a good 
 project CLAUDE.md, settings, hooks, skills and MCP servers: about 900 tokens of overhead instead of about 11,000.
 `--bare` is leaner still but needs an API key; the coordinator runs on the person's Claude sign-in. Ask for JSON
 back, parse it in code, and clean it in code (the no-dash rule is enforced in Python, not trusted to the model).
+
+## Agent run with one MCP server, the mechanics (the browser agent, 2026-11-12)
+
+When an agent needs a tool server that nothing else may touch (a browser, which reads untrusted pages), don't make it
+a Task subagent: that shares the coordinator's servers and context. The bridge starts its own `claude -p`
+(`claude_runner.run(..., lean_system=<persona>, mcp_config=..., settings_file=..., allowed_tools=<that server's
+tools>)`). That adds the lean flags plus three more:
+- `--mcp-config <file>` with only that server
+- `--settings <file>`, which holds the PreToolUse gate. Hooks from `--settings` load even under
+  `--setting-sources user`; checked 2026-11-12.
+- `--allowedTools`, listing that server's safe tools
+
+The coordinator only queues work (`tools/browser_queue.py`); a watcher thread picks it up.
+
+For anything outward, split it into two runs:
+1. **A prepare run** that can't commit. The gate refuses the commit step and keeps state per session.
+2. **A card** built in code from the prepare run's JSON.
+3. **A commit run** started only by the tap, carrying a one-time pass file that names the approval and the exact
+   values. The gate allows only those values.
+
+Claim success only on proof from the far side (a confirmation text or reference number), then add a follow-up.
+Pin the server version, run it with `node <cli.js>` (no npx download at run time), and let the person install it.

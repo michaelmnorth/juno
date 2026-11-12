@@ -9,3 +9,8 @@
   Phase 4). Both agents now say "not connected" instead of pointing at scripts that never existed.
 - **Hevy routine creation** (gated, T3). No tool yet; Rep returns routines as text.
 - **Holds dedupe.** `gcal.py hold` has no idempotency key; the run lock covers concurrent runs, not a repeated ask.
+- **Browser agent extras (P2).** A headed mode if Michael ever wants to watch; reusing the
+  profile's sign-ins for sites he logs into himself; a gate that sees the page (Playwright's element role and name)
+  instead of the model's description, so a fill run could click a widget safely.
+- **Progress line for long v1 runs (P2 #12).** A short "on it, checking your mail" while a DM run takes over a
+  minute, as the other assistant did with its reaction and interim reply.

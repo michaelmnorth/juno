@@ -187,6 +187,9 @@ connectors), and `--settings` with the gate hook (`.claude/hooks/gate_browser.py
 `--settings` load under `--setting-sources user`). The persona lives in `gateway/agents/browser.md`, outside
 `.claude/agents/`, so the coordinator can't call it through the Agent tool. The coordinator queues requests with
 `tools/browser_queue.py`. Playwright's own config turns off page-registered tools (`webmcp: false`), uses its
-bundled Chromium (never Michael's Chrome), headless, in `state/browser/profile`. `--allowed-origins` "is not a security
-boundary" per its README, so the hook checks every navigation itself. Michael's answers: every submit gets a card
+bundled Chromium (never Michael's Chrome), headless, in `state/browser/profile`. Playwright's `allowedOrigins` is not
+set: it "does not serve as a security boundary" per its README and would also block a form's scripts and styles
+from other hosts, so the hook checks every navigation itself. A submit run may press through later pages that ask
+for nothing new (a claim form with an instructions page between the fields and the confirmation); a page that asks
+for anything new stops it. Michael's answers: every submit gets a card
 ("Always a card"); always headless. Rollback: remove the `browser_watcher` thread; queued requests just wait.

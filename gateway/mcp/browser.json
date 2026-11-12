@@ -1,5 +1,5 @@
 {
-  "_comment": "Playwright MCP config for Juno's browser agent (gateway/browser_agent.py fills in the paths and sites per run). Headless Chromium from Playwright, its own profile under state/browser/profile, never Michael's Chrome. Page-registered tools (WebMCP) are off: a page can't hand the agent new tools. Pinned: @playwright/mcp 0.0.85.",
+  "_comment": "Playwright MCP config for Juno's browser agent (gateway/browser_agent.py fills in the paths per run). Headless Chromium from Playwright, its own profile under state/browser/profile, never Michael's Chrome. Page-registered tools (WebMCP) are off: a page can't hand the agent new tools. No allowedOrigins: it would also block the form's own scripts and styles from other hosts, and its README says it is no security boundary; .claude/hooks/gate_browser.py checks every navigation instead. Pinned: @playwright/mcp 0.0.85.",
   "browser": {
     "browserName": "chromium",
     "userDataDir": "{profile}",
@@ -8,6 +8,5 @@
   "capabilities": ["core"],
   "webmcp": false,
   "saveSession": false,
-  "outputDir": "{out}",
-  "network": {"allowedOrigins": "{origins}"}
+  "outputDir": "{out}"
 }

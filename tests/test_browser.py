@@ -66,6 +66,10 @@ def test_secrets_never_typed(field, value, tmp_path):
 
 
 def test_ordinary_values_and_numbers_are_fine(tmp_path):
+    assert d("browser_fill_form", {"fields": [{"name": "Spin speed", "value": "High"},
+                                              {"name": "Passenger count", "value": "2"},
+                                              {"name": "Shipping address 2", "value": ""},
+                                              {"name": "Footprint", "value": "27 in"}]}, FILL, tmp_path) == "allow"
     assert d("browser_fill_form", {"fields": [{"name": "Serial number", "value": "512KWYY4B123"},
                                               {"name": "Phone", "value": "404-555-0100"},
                                               {"name": "Model", "value": "WM1234HWA"}]}, FILL, tmp_path) == "allow"
@@ -168,7 +172,7 @@ def test_fill_run_is_its_own_lean_browser_run(tmp_path, cli):
     args = mcp["mcpServers"]["playwright"]["args"]
     pw = json.loads(Path(args[args.index("--config") + 1]).read_text(encoding="utf-8"))
     assert pw["browser"]["launchOptions"]["headless"] is True and pw["browser"]["browserName"] == "chromium"
-    assert pw["webmcp"] is False and pw["network"]["allowedOrigins"] == [SITE]
+    assert pw["webmcp"] is False and "network" not in pw  # the hook checks navigation; see the template
     assert Path(pw["browser"]["userDataDir"]) == tmp_path / "state" / "browser" / "profile"
     hooks = json.loads(Path(kw["settings_file"]).read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
     assert hooks["matcher"] == "mcp__playwright__.*" and hooks["hooks"][0]["args"][0].endswith("gate_browser.py")

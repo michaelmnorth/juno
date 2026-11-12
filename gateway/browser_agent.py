@@ -72,7 +72,6 @@ def write_configs(root: Path, origins: list[str], cli: Path) -> tuple[Path, Path
     cfg.pop("_comment", None)
     cfg["browser"]["userDataDir"] = str(out / "profile")
     cfg["outputDir"] = str(out / "out")
-    cfg["network"]["allowedOrigins"] = list(origins)
     pw = out / "playwright.json"
     pw.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     node = shutil.which("node") or "node"
@@ -111,7 +110,8 @@ def fill_prompt(req: dict) -> str:
     return (f"Task: {req['task']}\nForm page: {req['url']}\nSites you may use: {', '.join(req['origins'])}\n"
             f"Values to enter (use only these):\n{_values_block(req['values'])}\n\n"
             "Fill the form but do NOT submit it: the submit happens later, after Michael approves. Don't press "
-            "Enter or the submit button. Then reply with only:\n" + FILL_JSON)
+            "Enter or the submit button. If the form has several pages, fill the first page and report its "
+            "button (Next, Continue or Submit) as submit_label. Then reply with only:\n" + FILL_JSON)
 
 
 def submit_prompt(entry: dict) -> str:
@@ -119,8 +119,12 @@ def submit_prompt(entry: dict) -> str:
     return (f"Michael approved this submission.\nForm page: {entry['url']}\n"
             f"Enter exactly these values (nothing else, nothing changed):\n{values}\n"
             f"Then press the button labeled \"{entry['submit_label']}\" once. If the form now differs (new required "
-            "fields, other choices, a login or payment), don't submit; say what differs. After submitting, wait for "
-            "the page and read what it says. Claim submitted only if the page confirms it. Reply with only:\n"
+            "fields, other choices, a login, a payment or a CAPTCHA), don't submit; say what differs. Later pages "
+            "that ask for nothing new (instructions, a review page) you may press through with their Next, Continue "
+            "or Submit button; a later page that asks for new information or a choice stops the run (say what it "
+            "asks). Wait for the final page and read what it says, and take one screenshot of it (no file name; it "
+            "is kept for the log). Claim submitted only if the page confirms it. "
+            "Reply with only:\n"
             + SUBMIT_JSON)
 
 

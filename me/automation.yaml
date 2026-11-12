@@ -12,6 +12,7 @@ actions:
   booking.paid:           {mode: ask,   note: "Michael wants Juno to book things like events later. Anything that costs money is always a tap with the price shown."}
   sheet.append_log:       {mode: auto,  note: "Michael 2026-11-08: Juno logs each workout to the coach's sheet on her own (empty cells and MN notes only; moves, clears and overwrites stay his call)"}
   hevy.routine.create:    {mode: ask,   clean_approvals: 0}
+  web.form.submit:        {mode: ask,   note: "Michael 2026-11-12: always a card with the site, every value and the button, even when he asked for that form. Code never auto-approves it (gateway/approval_policy.py)."}
   memory.observe:         {mode: auto,  note: "Michael 2026-11-07: Juno keeps observed/ silently and reports changes in the brief and check-in"}
   memory.write:           {mode: ask,   note: "me/, learnings/, people/, CONTEXT.md; never auto when unattended"}
   discord.channel:        {mode: auto_notify, note: "Michael 2026-11-11: full control of his Discord server: channels (create, rename, topic, move, archive) and the server name, icon and banner with tools/discord_admin.py; Juno says what she changed. No delete exists; archive moves a channel into Archive."}

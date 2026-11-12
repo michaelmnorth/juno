@@ -30,9 +30,10 @@ ALLOWED = {"browser_navigate", "browser_navigate_back", "browser_snapshot", "bro
            "browser_take_screenshot", "browser_close", "browser_hover", "browser_handle_dialog"}
 NEVER_CLICK = re.compile(r"(?i)\b(buy|checkout|check out|pay|payment|place (my |your )?order|purchase|add to cart|"
                          r"sign ?up|create (an |my |your )?account|register an account|subscribe|log ?in|sign ?in)\b")
-SECRET_FIELD = re.compile(r"(?i)(pass(word|code|phrase)?|pin\b|cvv|cvc|security code|card number|credit card|"
-                          r"debit card|account number|routing|ssn|social security|tax id|\bein\b|driver'?s? licen[cs]e|"
-                          r"passport|one[- ]time code|otp|2fa|verification code)")
+SECRET_FIELD = re.compile(r"(?i)(\bpass(word|code|phrase)?\b|\bpin\b|\bcvv|\bcvc|security code|card number|"
+                          r"credit card|debit card|account number|routing number|\bssn\b|social security|tax id|"
+                          r"\bein\b|driver'?s? licen[cs]e|passport|one[- ]time code|\botp\b|\b2fa\b|"
+                          r"verification code)")
 SSN = re.compile(r"\b\d{3}-?\d{2}-?\d{4}\b")
 DIGITS = re.compile(r"\d[\d -]{11,22}\d")
 SUBMIT_KEYS = {"enter", "numpadenter"}

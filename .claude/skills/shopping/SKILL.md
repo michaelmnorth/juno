@@ -12,8 +12,10 @@ Juno never buys anything (T4 spirit). The result is a short answer with links he
    parts diagram. A product that "looks right" is not a match; the part number must match.
 2. **Free first.** Before any price, check for a recall, warranty, extended-warranty or free-part program on the
    maker's own site (search `<brand> <model> recall`, `<brand> <part> free replacement`, the purchase date against
-   the warranty length). If one fits, that is the answer, and a claim form is the `browser` agent's job (a card
-   before anything is submitted).
+   the warranty length). If one fits, that is the answer. If he asks you to file the claim, find what it needs
+   (the purchase date from his order mail, never his estimate; the serial off the label) and queue it:
+   `python tools/browser_queue.py add --url <claim page> --task "..." --value "Field=value" ...`. The browser agent
+   fills it headless and he gets a card with every value; only his tap submits.
 3. **Price on the page itself.** Read price and stock on the product page (WebFetch), never from a search snippet
    or an ad. Prefer the maker's own store, then one or two big retailers. Write down for each: store, exact part
    number, price, stock or ship date, shipping cost, return window, and the date you checked.

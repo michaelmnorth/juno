@@ -1639,6 +1639,9 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=timers_watcher, args=(app.client, bridge), daemon=True).start()
     threading.Thread(target=hevy_watcher, args=(app.client, bridge), daemon=True).start()
     heartbeat("bridge", True, "started")
+    import browser_agent
+    LOG.info("Browser agent %s", "available (headless, own profile)" if browser_agent.find_cli()
+             else "not installed: npm install -g @playwright/mcp@0.0.85, then playwright-mcp install-browser chromium")
     LOG.info("Juno bridge up on %s; allowlist=%s; v2 key %s", bridge.channel, sorted(bridge.allowlist),
              "loaded" if os.environ.get("JUNO_V2_API_KEY") else "missing (DMs go to v1)")
     if bridge.channel == "discord":
