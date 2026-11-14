@@ -172,3 +172,13 @@ def test_discord_typing_hits_the_typing_endpoint():
     c = DiscordClient(lambda m, p, b=None: calls.append((m, p)) or {}, Registry.__new__(Registry))
     c.typing(channel="123")
     assert calls == [("POST", "/channels/123/typing")]
+
+
+def test_cli_runs_never_inherit_an_api_key(monkeypatch):
+    """With an API key in its environment, Claude Code silently bills the API instead of the Max plan login."""
+    import claude_runner
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "tok-test")
+    monkeypatch.setenv("JUNO_V2_API_KEY", "sk-test")
+    env = claude_runner.child_env()
+    assert not {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "JUNO_V2_API_KEY"} & set(env)
