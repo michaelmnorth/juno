@@ -182,7 +182,7 @@ def loop(client, *, model: str, effort: str, system: list[dict], messages: list[
         run.calls += 1
         run.cost += rec.cost
         if any(getattr(b, "type", "") in WEB_RESULTS for b in getattr(resp, "content", []) or []):
-            run.tainted = True  # a web page or search result is outside text, like mail
+            run.tainted = run.tool_tainted = True  # a web page or search result is outside text, like mail
         if rec.stop_reason == "refusal":
             return LaneResult(None, "", "refusal", records, stopped="refusal")
         if rec.stop_reason == "max_tokens":
