@@ -323,6 +323,11 @@ class DiscordClient:
         self.registry.remember(ts, text, blocks)
         return {"ok": True, "ts": ts}
 
+    def typing(self, *, channel: str, **_) -> dict:
+        """Shows "Juno is typing…" for about 10 seconds, or until her next message lands."""
+        self.rest("POST", f"/channels/{channel}/typing")
+        return {"ok": True}
+
     def chat_delete(self, *, channel: str, ts: str, **_) -> dict:
         self.rest("DELETE", f"/channels/{channel}/messages/{ts}")
         return {"ok": True}

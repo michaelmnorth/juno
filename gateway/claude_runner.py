@@ -19,7 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The bridge needs these to reach Slack, 1Password and Google. Claude runs and their tools never do.
-SECRET_ENV_PREFIXES = ("SLACK_", "DISCORD_", "OP_", "GOOGLE_", "JUNO_V2_API_KEY")
+# ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN too: with either set, Claude Code bills the API instead of the Max plan login.
+SECRET_ENV_PREFIXES = ("SLACK_", "DISCORD_", "OP_", "GOOGLE_", "JUNO_V2_API_KEY", "ANTHROPIC_API_KEY",
+                       "ANTHROPIC_AUTH_TOKEN")
 
 
 def child_env() -> dict[str, str]:

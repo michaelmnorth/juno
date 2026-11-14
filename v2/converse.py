@@ -77,7 +77,8 @@ class Engine:
             client = self.client_factory()
             thread = self.store.thread(channel, self._now())
             mine = [t["text"] for t in self.store.turns(channel, config.RECENT_TURNS) if t["role"] == "user"]
-            route, rres = router.route(client, text, thread["summary"], mine, thread.get("playbook", ""))
+            route, rres = router.route(client, text, thread["summary"], mine, thread.get("playbook", ""),
+                                       answering=self.answering(channel))
             if route.unsupported:
                 self.store.mark_event(event_id, "handed_off")
                 self.policy.audit("v2_handoff", {"event": event_id, "why": "unsupported", "intent": route.intent})
@@ -85,7 +86,12 @@ class Engine:
             lane = "l2" if route.needs_tools else "l1"
             budget = config.BUDGETS["deep" if route.complexity == "deep" else lane]
             specs = tools.for_playbook(route.playbook) if lane == "l2" else []
-            run = new_run("converse", route.intent, specs, budget, thread["tainted"])
+            # A scheduled message he may be answering sits in the last turns. It was written from mail and the
+            # web, so this run is tainted (holds go to a card), but the thread isn't marked for it: the next
+            # sweep would otherwise keep every DM tainted all day.
+            from_timer = any(str(t.get("run_id") or "").startswith(OUTBOUND)
+                             for t in self.store.turns(channel, config.RECENT_TURNS))
+            run = new_run("converse", route.intent, specs, budget, thread["tainted"] or from_timer)
             if rres:
                 run.cost += rres.cost
                 self.record(run, "l1", route.intent, config.EFFORT["router"], rres, {"message": assembler.est(text)},
@@ -107,7 +113,8 @@ class Engine:
                 return Reply("", run.run_id, round(run.cost, 6), handoff=True)
             reply = self._reply_text(res, run)
             self.store.set_playbook(channel, route.playbook)
-            self._remember(channel, text, reply, run.run_id, thread, run.touched, run.tainted)
+            self._remember(channel, text, reply, run.run_id, thread, run.touched,
+                           thread["tainted"] or run.tool_tainted)
             self._log_cost(run)
             self.store.mark_event(event_id, "done")
             if built.overflow:
@@ -134,13 +141,46 @@ class Engine:
         thread = self.store.thread(channel, self._now())
         self._remember(channel, text, reply, "", thread, [], True)
 
+    def note_outbound(self, channel: str, text: str, source: str) -> None:
+        """Something went to Michael that wasn't a reply to him: a sweep ping, the brief, a reminder, a card. Kept as
+        one of your turns so a short answer ("I did", "yes", "the second one") is read against it, not against
+        whatever the DM was about before (found 2026-11-13: a sweep asked "did you set them up?", he said "I did",
+        and the reply went back to pinning a channel). The thread's summary and taint are left alone."""
+        text = re.sub(r"^\[react:[^\]]*\]\s*", "", (text or "").strip())
+        if not text:
+            return
+        self.store.add_turn(channel, "assistant", clip_outbound(text), OUTBOUND + source)
+
+    def answering(self, channel: str) -> str:
+        """The newest thing sent to him since he last wrote, if any: what a short reply most likely answers."""
+        rows = self.store.turns(channel, 8)
+        last = rows[-1] if rows else None
+        if last and last["role"] == "assistant":
+            return last["text"][:400]
+        return ""
+
+    def unanswered_lines(self, channel: str, limit: int = 3) -> str:
+        """Scheduled messages sent since his last message, as plain lines for a v1 prompt (v1's own session never
+        saw them: the timers run in sessions of their own)."""
+        rows = self.store.turns(channel, 12)
+        tail: list[dict] = []
+        for t in reversed(rows):
+            if t["role"] == "user":
+                break
+            if str(t.get("run_id") or "").startswith(OUTBOUND):
+                tail.append(t)
+        return "\n".join(f"- ({t['at'][11:16]} UTC) {t['text'][:500]}" for t in reversed(tail[:limit]))
+
     def recent_lines(self, channel: str, limit: int = 4) -> str:
         """The last few turns, as plain lines for a v1 handoff prompt: Michael's messages and v2's own replies.
         v1's earlier replies are left out (v1 has its own session for those), so a mistaken belief in one of them,
         like "that tool is blocked", is never fed back to v1 as fact (found 2026-11-11)."""
         rows = [t for t in self.store.turns(channel, limit * 2) if t["role"] == "user" or t.get("run_id")]
-        return "\n".join(f"{'Michael' if t['role'] == 'user' else 'The lighter engine'}: {t['text'][:300]}"
-                         for t in rows[-limit:])
+        def who(t: dict) -> str:
+            if t["role"] == "user":
+                return "Michael"
+            return "You, in a scheduled message" if str(t.get("run_id")).startswith(OUTBOUND) else "The lighter engine"
+        return "\n".join(f"{who(t)}: {t['text'][:300]}" for t in rows[-limit:])
 
     def reset(self, channel: str) -> None:
         self.store.save_thread(channel, summary="", working_set=[], tainted=False)
@@ -269,6 +309,17 @@ class Engine:
                 fh.write(json.dumps(line) + "\n")
         except OSError:
             pass
+
+
+OUTBOUND = "out:"  # run_id prefix for turns that were sent to him unasked (timers, reminders, cards)
+OUTBOUND_MAX = 900
+
+
+def clip_outbound(text: str) -> str:
+    """Long briefs keep their start and their end: a question to him is usually the last line."""
+    if len(text) <= OUTBOUND_MAX:
+        return text
+    return text[:300].rstrip() + " … " + text[-(OUTBOUND_MAX - 303):].lstrip()
 
 
 def _plain(tool_name: str) -> str:
