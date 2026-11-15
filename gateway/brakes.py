@@ -86,8 +86,10 @@ def spend_notice(root: Path, now: datetime | None = None) -> str | None:
         return None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"day": day, "at": passed[-1]}), encoding="utf-8")
-    return (f"Heads up: today's runs are at ${dollars:.2f} ({_tokens(tokens)} tokens). Nothing's paused, "
-            "I just figured you'd want to know where the money goes. 💸")
+    # Runs are on his Max plan (Michael 2026-11-15): the dollars are what the CLI says they would cost at API prices,
+    # a yardstick for how hard Juno leans on his usage, not a bill.
+    return (f"Heads up: today's runs come to {_tokens(tokens)} tokens, about ${dollars:.2f} at API prices. It's all on "
+            "your Max plan, so nothing's billed and nothing's paused; just a busy day for me. 💸")
 
 
 def blocked(root: Path, now: datetime | None = None) -> str | None:

@@ -12,6 +12,8 @@ anchors:                # scheduled touchpoints; these do not count against the 
   coach_sheet_nightly: "21:17"           # catch-all sheet sync and coach note (Michael 2026-11-08)
   hevy_check_every_minutes: 30           # stands in for a Hevy webhook; no model unless a session is new (Michael: 10 was too often)
   hevy_check_window: ["06:00", "22:00"]
+  token_optimizer: "06:40"               # yesterday's usage, suggestions only, posts only when worth it (Michael 2026-11-15)
+  research_scan: "12:10"                 # what's new in personal assistants, posts only when there's news (Michael 2026-11-15)
 unprompted_pings_per_day: 5     # hard ceiling, not a target; most days should be fewer (Michael)
 # Michael 2026-11-07: a sweep pings only when something is worth his attention. Silence is the default.
 # Worth a ping: something today he must leave for on time, something he is looking forward to, a reply-needed

@@ -15,6 +15,8 @@ math). The last three serve Kin (`relationships`). Their data lives in `data/mai
 `people_match.py` (who in a mail or invite has a profile, and who in Contacts doesn't yet; starter profiles).
 `people_queue.py` (profile notes waiting for Michael's Save tap; the bridge writes them on Save).
 `trust.py` (michael, known, contact or unknown for an address; the bridge labels approval cards with it).
+`usage_report.py` (tokens per request and per Eastern day from `state/costs.jsonl`, with `what` each run was for
+and plain hints; no model. The daily token optimizer in `gateway/daily_jobs.py` reads it).
 `observed.py` (life cycle of Juno's silent notes: confidence, stale retirement, duplicates, size).
 `google_read.py` (Google sign-in and the sweep wake gate). `inbox.py` (new inbox mail for the sweep and brief:
 headers, trust labels and `domains/admin/inbox-sort.yaml` settle most of it in code; the rest goes to Sorter as a

@@ -315,10 +315,13 @@ class Engine:
         tokens = {"in": sum(r["input_tokens"] or 0 for r in rows), "out": sum(r["output_tokens"] or 0 for r in rows),
                   "cache_read": sum(r["cache_read"] or 0 for r in rows),
                   "cache_write": sum((r["cache_write_5m"] or 0) + (r["cache_write_1h"] or 0) for r in rows)}
+        what = run.intent + (": " + "; ".join(run.done) if run.done else "")
         line = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "job": "dm-v2",
                 "model": config.MODELS["converse"], "cost_usd": round(run.cost, 6),
                 "session_total_usd": round(run.cost, 6), "session_id": run.run_id, "tokens": tokens,
-                "turns": run.calls, "is_error": error}
+                "turns": run.calls, "is_error": error, "what": " ".join(what.split())[:120]}
+        if config.BACKEND == "max":  # each CLI run already logged its own line; this one only says what was done
+            line.update(cost_usd=0.0, session_total_usd=0.0, parts_usd=round(run.cost, 6), tokens=None, summary=True)
         try:
             path = self.root / "state" / "costs.jsonl"
             path.parent.mkdir(parents=True, exist_ok=True)

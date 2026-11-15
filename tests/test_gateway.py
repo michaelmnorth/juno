@@ -685,7 +685,7 @@ def test_spend_never_pauses_and_notices_once_at_5_and_10(bridge):
     (state / "costs.jsonl").write_text(NL.join(json.dumps(r) for r in rows), encoding="utf-8")
     assert brakes.today_totals(b.root) == (5.5, 1_006_000) and brakes.blocked(b.root) is None
     first = b.handle_dm("D1", "U_MICHAEL", "hi")
-    assert len(runner.calls) == 1 and "$5.50 (1.0M tokens)" in first and "Nothing's paused" in first
+    assert len(runner.calls) == 1 and "1.0M tokens, about $5.50 at API prices" in first and "nothing's paused" in first
     assert "Heads up" not in b.handle_dm("D1", "U_MICHAEL", "hi again")  # once per amount
     with (state / "costs.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(NL + json.dumps({"at": now, "job": "sweep", "cost_usd": 5.0, "session_total_usd": 5.0}))

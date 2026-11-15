@@ -115,7 +115,7 @@ def call(client: MaxClient, *, model: str, effort: str, system: list[dict], mess
     sys_text, prompt = flatten(system, messages)
     started = time.monotonic()
     result = client.run(prompt, lean_system=sys_text, model=model, effort=effort, json_schema=schema,
-                        max_turns=3, timeout=180, job=job)
+                        max_turns=3, timeout=180, job=job, what=job)
     rec = record(model, result)
     if not rec.latency_ms:
         rec.latency_ms = int((time.monotonic() - started) * 1000)
@@ -167,12 +167,14 @@ def loop(client: MaxClient, engine, *, model: str, effort: str, system: list[dic
                                 mcp_config=mcp, settings_file=settings,
                                 allowed_tools=allowed + (WEB_TOOLS if research else ()),
                                 builtin_tools=WEB_TOOLS if research else (), max_turns=run.budget.calls + 2,
-                                max_budget_usd=run.budget.dollars, timeout=300, job="dm-converse")
+                                max_budget_usd=run.budget.dollars, timeout=300, job="dm-converse",
+                                what=run.intent)
         else:
             result = client.run(prompt, lean_system=sys_text, model=model, effort=effort, json_schema=REPLY_SCHEMA,
                                 allowed_tools=WEB_TOOLS if research else (),
                                 builtin_tools=WEB_TOOLS if research else (), max_turns=run.budget.calls + 2,
-                                max_budget_usd=run.budget.dollars, timeout=300, job="dm-converse")
+                                max_budget_usd=run.budget.dollars, timeout=300, job="dm-converse",
+                                what=run.intent)
     finally:
         for f in (mcp, settings):
             f.unlink(missing_ok=True)
