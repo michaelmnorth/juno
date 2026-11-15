@@ -34,6 +34,10 @@ import pay_queue  # noqa: E402
 ACTION = "payment.link"
 WAITING = ("created", "pending_approval", "requires_action")
 APPROVAL_WINDOW = timedelta(minutes=35)  # Link gives him 30 minutes; a little slack for the clock
+LINK_MINUTES = 30
+# Nudges while Link waits on his passkey, in minutes after the request. On 2026-11-14 he tapped Pay in Discord,
+# took that as done, and the Link approval ran out 35 minutes later with nothing charged.
+REMINDERS = (10, 25)
 NOT_INSTALLED = ("Link isn't set up on this PC yet, so I couldn't ask it for a card. Nothing was charged. Michael "
                  "installs it once: `npm i -g @stripe/link-cli`, then `link-cli auth login`. 🙃")
 
@@ -237,8 +241,37 @@ def start(root: Path, entry: dict, link: Link | None, path: Path | None = None, 
                      requested_at=(now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
                      approval_id=entry["id"])
     test = "" if entry.get("live") else " It's test mode, so nothing real gets charged."
-    return (f"Asked Link for {money(entry['amount_cents'])} at {entry['store']}. Approve it in your Link app in the "
-            f"next 30 minutes and I'll finish the checkout.{test} 🔐")
+    by = clock((now or datetime.now(timezone.utc)) + timedelta(minutes=LINK_MINUTES))
+    return (f"Step 1 done: your tap. Step 2 is yours, in the Link app: open Link, tap the "
+            f"{money(entry['amount_cents'])} request from {entry['store']}, then Approve and use your passkey. "
+            f"You have until {by}; I'll finish the checkout the moment it's approved.{test} 🔐")
+
+
+def clock(at: datetime) -> str:
+    """His Eastern time, like 10:31 PM."""
+    from zoneinfo import ZoneInfo
+    local = at.astimezone(ZoneInfo("America/New_York"))
+    return local.strftime("%I:%M %p").lstrip("0")
+
+
+def reminder(req: dict, now: datetime) -> tuple[str, int] | None:
+    """The nudge that is due for a request still waiting on his passkey, with its number, or None."""
+    asked = datetime.fromisoformat(req.get("requested_at") or now.isoformat())
+    minutes = (now - asked).total_seconds() / 60
+    sent = int(req.get("reminders_sent") or 0)
+    due = [i for i, at in enumerate(REMINDERS, 1) if minutes >= at and i > sent]
+    if not due or minutes >= LINK_MINUTES:
+        return None
+    left = max(1, round(LINK_MINUTES - minutes))
+    amount, store, by = money(req["amount_cents"]), req["store"], clock(asked + timedelta(minutes=LINK_MINUTES))
+    if due[-1] < len(REMINDERS):
+        line = (f"Still waiting on your passkey for {amount} at {store}. Tapping Pay here was step one; step two is "
+                f"in the Link app: open Link, tap the {amount} request, Approve, passkey. About {left} minutes left "
+                f"(until {by}). ⏳")
+    else:
+        line = (f"Last call: the {amount} Link request for {store} runs out in about {left} minutes. Open the Link "
+                "app, tap the request, Approve with your passkey, and I'll do the rest. ⏰")
+    return line, due[-1]
 
 
 def deny(root: Path, entry: dict, path: Path | None = None) -> None:
@@ -266,16 +299,30 @@ def step(root: Path, link: Link | None, open_browser, path: Path | None = None, 
                 lines.append(note)
             if stopped:
                 continue
+        about = {"id": req.get("approval_id"), "action_class": ACTION,
+                 "summary": f"{money(req['amount_cents'])} to {req['store']}"}
         if status in WAITING:
             asked = datetime.fromisoformat(req.get("requested_at") or now.isoformat())
             if now - asked > APPROVAL_WINDOW:
                 link.cancel(req["spend_id"])
                 pay_queue.update(req["id"], path, status="expired")
-                lines.append(f"The Link approval for {req['store']} ran out, so nothing was charged. Ask again if "
-                             "you still want it. 😴")
+                line = (f"The Link approval for {req['store']} ran out before your passkey, so nothing was charged. "
+                        "Say \"pay it again\" if you still want it, and I'll queue a fresh card. 😴")
+                if audit:
+                    audit("payment_expired", about, "no passkey approval in Link within 30 minutes")
+                lines.append(line)
+                continue
+            nudge = reminder(req, now)
+            if nudge:
+                pay_queue.update(req["id"], path, reminders_sent=nudge[1])
+                if audit:
+                    audit("payment_reminded", about, f"reminder {nudge[1]}")
+                lines.append(nudge[0])
             continue
         if status != "approved":
             pay_queue.update(req["id"], path, status="declined", note=status)
+            if audit:
+                audit("payment_declined", about, status)
             lines.append(f"Link says the {req['store']} payment wasn't approved ({status}), so nothing was charged.")
             continue
         pay_queue.update(req["id"], path, status="paying")

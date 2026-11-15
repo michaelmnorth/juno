@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import claude_runner  # noqa: E402
+import activity_log  # noqa: E402
 import approval_policy  # noqa: E402
 import brakes  # noqa: E402
 import brief_blocks  # noqa: E402
@@ -613,9 +614,11 @@ def answer_batch(client, bridge: "Bridge", channel: str, items: list[dict]) -> N
             _typing(client, channel)
     _typing(client, channel)
     threading.Thread(target=keep_typing, daemon=True).start()
+    said = "\n\n".join(i["text"] for i in items)
+    if bridge.allowed(items[-1]["user"]):
+        activity_log.write(bridge.root, "Michael", said)
     try:
-        reply = bridge.handle_dm(channel, items[-1]["user"], "\n\n".join(i["text"] for i in items),
-                                 dedupe=f"{channel}:{last}")
+        reply = bridge.handle_dm(channel, items[-1]["user"], said, dedupe=f"{channel}:{last}")
     finally:
         typing_stop.set()
         note_exchange(channel)
@@ -623,6 +626,8 @@ def answer_batch(client, bridge: "Bridge", channel: str, items: list[dict]) -> N
         for item in items:
             _react(client, channel, item["ts"], _seen_on.pop(item["ts"], "eyes"), remove=True)
     emoji, reply = split_reaction(reply)
+    if reply.strip():
+        activity_log.write(bridge.root, "Juno", reply)
     for part in chunk(brief_blocks.to_mrkdwn(reply)) if reply.strip() else []:
         client.chat_postMessage(channel=channel, text=part)
     _react(client, channel, last, emoji or (done_reaction() if reply.strip() else "warning"))
@@ -987,6 +992,27 @@ class Bridge:
         approval_policy.signal(self.root / "state", "payment.skipped", entry)
         return "Skipped. Nothing was charged. 👍"
 
+    def builds_step(self) -> list[str]:
+        """Build requests from his DM (gateway/builds.py): a named yes starts a Claude Code cloud session now, any
+        other request becomes a Start build card."""
+        import builds
+        state = self.root / "state"
+        return builds.process(self.root, self.approvals.append,
+                              audit=lambda event, entry, note: approval_policy.audit(state, event, entry, note))
+
+    def tapped_build(self, entry: dict, state: Path, approved: bool) -> str:
+        import builds
+        try:
+            line = builds.tapped(self.root, entry, approved)
+        except Exception as exc:
+            approval_policy.audit(state, "build_failed", entry, type(exc).__name__)
+            return "The build broke before it started, so nothing changed. 🙃"
+        event = "build_skipped" if not approved else ("build_started" if line.startswith("Started") else
+                                                       "build_failed")
+        approval_policy.audit(state, event, entry, line.splitlines()[0][:200])
+        approval_policy.signal(state, f"build.{'started' if approved else 'skipped'}", entry)
+        return line
+
     def payments_step(self) -> list[str]:
         """New payment requests → cards; requests Michael approved in Link → checkout. Code only."""
         import payments
@@ -1045,6 +1071,8 @@ class Bridge:
             return self.submit_form(entry, state)
         if entry.get("action_class") == "payment.link":  # code only, both ways: no model session is resumed
             return self.start_payment(entry, state) if decision == "approved" else self.deny_payment(entry)
+        if entry.get("action_class") == "build.start":  # code only: starts a Claude Code cloud session
+            return self.tapped_build(entry, state, decision == "approved")
         if decision == "approved" and entry.get("action_class") == "subagent.install":
             done = self.install(entry)
             tools, env = (), {}
@@ -1381,7 +1409,12 @@ def done_line(entry: dict | None, decision: str, now: datetime | None = None) ->
     at = approval_policy._clock(now or datetime.now(timezone.utc))
     if decision == "denied":
         return "Skipped." if (entry or {}).get("action_class") == "email.send" else f"⛔ Not now ({at})."
-    verb = "Send approved" if (entry or {}).get("action_class") == "email.send" else "Approved"  # the thread says if it ran
+    cls = (entry or {}).get("action_class")
+    if cls == "payment.link":  # the tap is step one; he still approves in Link (the 2026-11-14 test expired there)
+        return f"✅ Tapped {at} · next: approve it in your Link app with your passkey"
+    if cls == "build.start":
+        return f"✅ Start tapped {at} · the result is just below"
+    verb = "Send approved" if cls == "email.send" else "Approved"  # the thread says if it ran
     return f"✅ {verb} {at}" + (" · always from now on" if decision == "always" else "")
 
 
@@ -1418,6 +1451,9 @@ def post_to_michael(client, bridge: Bridge, text: str, blocks: list[dict] | None
             ts = client.chat_postMessage(channel=channel, text=part)["ts"]
     if ts and thread:
         client.chat_postMessage(channel=channel, thread_ts=ts, text=brief_blocks.to_mrkdwn("\n".join(thread)))
+    if ts and getattr(bridge, "root", None):
+        activity_log.write(bridge.root, "Juno" if source in ("ping", "build") else f"Juno ({source})",
+                           "\n".join([text] + (thread or [])))
     if ts:
         note = getattr(bridge, "note_outbound", None)
         if note:  # so his next DM is read against what he was just sent
@@ -1578,6 +1614,9 @@ def approvals_watcher(client, bridge: Bridge, interval: int = 20) -> None:
                 approval_policy.audit(bridge.root / "state", "posted", entry)
             expire_cards(client, bridge)
             post_vault_requests(client, bridge)
+            if not brakes.paused(bridge.root):
+                for line in bridge.builds_step():
+                    post_to_michael(client, bridge, line, source="build")
         except Exception as exc:  # keep the watcher alive
             LOG.exception("approvals watcher: %s", exc)
         time.sleep(interval)

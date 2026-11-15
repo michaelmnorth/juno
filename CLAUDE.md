@@ -72,6 +72,13 @@ yourself and say which agent would normally handle it.
   --session-id <this session>`. Add `--named` only when his own DM named that store. The bridge posts a Pay card;
   his tap and his passkey in the Link app pay it, and the bridge reports back. Tell him a card is coming. Never
   pay any other way, and never put a card, account or ID number anywhere.
+- A change to Juno herself (a feature, a fix, "build it", "make that change", "put it on the build list"), or a
+  yes to a change you suggested (a research idea, a token saving) → `python tools/build_queue.py add --title "<a few
+  words>" --task "<the whole brief: what to change and why, files if known, how to test>" --why "<plain words>"
+  --session-id <this session>`. Add `--named` when his own DM said yes to that change. The bridge starts a Claude
+  Code session in the cloud on his Max plan that works on its own branch and opens a draft pull request, and sends
+  him the link; without `--named` he gets a Start build card first. Tell him which. Merging and real-money payments
+  are never part of a build: they stay his own step (the queue refuses them).
 - A web form to fill (a warranty claim, a registration, a request form) → `python tools/browser_queue.py add --url
   <https form page> --task "<what it's for>" --value "Field=value" ... --why "<plain words>" --session-id <this
   session>`. Values come from what you already know (`domains/`, his order mail, the label photo); never a password,
@@ -202,6 +209,9 @@ chat and never read the values; tools fetch them inside fixed scripts.
   Michael changed before sending.
 - **Signals:** append one JSON line per observable reaction to `state/signals.jsonl` (button pressed, draft sent
   as-is or edited, ping ignored, request no agent covered). The reflector reads these.
+- **Conversation log:** the bridge writes every DM, reply, ping, card, tap and payment or build outcome to
+  `logs/conversations/YYYY-MM-DD.md` (his Eastern day, secrets removed, stays on this PC). The claude.ai project
+  reads it instead of asking him for screenshots. You don't write it; read it for "what did we say about".
 - **Log:** write `logs/YYYY-MM-DD_HHMM_<task>.md`: trigger, what was read (IDs and subjects, not bodies), each
   decision and why, what was created, assumptions, anything blocked or suspicious.
 

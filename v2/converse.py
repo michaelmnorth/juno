@@ -72,7 +72,7 @@ class Engine:
         try:
             if ATTACHED.search(text):
                 self.store.mark_event(event_id, "handed_off")
-                self.policy.audit("v2_handoff", {"event": event_id, "why": "attachment"})
+                self.policy.audit("v2_handoff", {"event_id": event_id, "why": "attachment"})
                 return Reply("", handoff=True)
             client = self.client_factory()
             thread = self.store.thread(channel, self._now())
@@ -81,7 +81,7 @@ class Engine:
                                        answering=self.answering(channel))
             if route.unsupported:
                 self.store.mark_event(event_id, "handed_off")
-                self.policy.audit("v2_handoff", {"event": event_id, "why": "unsupported", "intent": route.intent})
+                self.policy.audit("v2_handoff", {"event_id": event_id, "why": "unsupported", "intent": route.intent})
                 return Reply("", cost=round(rres.cost, 6) if rres else 0.0, handoff=True)
             lane = "l2" if route.needs_tools else "l1"
             budget = config.BUDGETS["deep" if route.complexity == "deep" else lane]
