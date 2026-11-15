@@ -154,7 +154,7 @@ def test_tap_asks_link_in_test_mode(tmp_path):
     root, entry = carded(tmp_path)
     link = FakeLink()
     line = payments.start(root, entry, link, cfg=CFG, now=NOW)
-    assert "Approve it in your Link app" in line and "test mode" in line
+    assert "Approve and use your passkey" in line and "test mode" in line
     req = pay_queue.load(root / "state" / "payment-requests.json")[0]
     assert req["status"] == "requested" and req["spend_id"] == "lsrq_1"
     assert payments.start(root, entry, link, cfg=CFG, now=NOW).startswith("That payment isn't waiting")
@@ -326,3 +326,28 @@ def test_plan_refuses_two_pay_buttons_and_finds_month_and_year():
     fields, button, why = checkout.plan(split, CARD, 4250)
     assert not why and ("Month", "f1e5", "04") in fields and ("Year", "f1e6", "2029") in fields
     assert "card number" in checkout.plan(SNAP.replace("Card number", "Gift note"), CARD, 4250)[2]
+
+
+def test_reminds_twice_before_link_runs_out_then_expires_with_an_audit(tmp_path):
+    link = FakeLink(["pending_approval"] * 5)
+    root = requested(tmp_path, link)
+    events = []
+    audit = lambda event, entry, note: events.append(event)  # noqa: E731
+    step = lambda minutes: payments.step(root, link, lambda: None, now=NOW + timedelta(minutes=minutes),  # noqa: E731
+                                         audit=audit)
+    assert step(5) == []
+    first = step(11)
+    assert len(first) == 1 and "step two is in the Link app" in first[0] and "19 minutes left" in first[0]
+    assert step(12) == []  # once per reminder
+    last = step(26)
+    assert len(last) == 1 and last[0].startswith("Last call") and "4 minutes" in last[0]
+    gone = step(36)
+    assert "ran out before your passkey" in gone[0] and link.cancelled == ["lsrq_1"]
+    assert events == ["payment_reminded", "payment_reminded", "payment_expired"]
+
+
+def test_late_first_check_sends_only_the_last_call(tmp_path):
+    link = FakeLink(["pending_approval"])
+    root = requested(tmp_path, link)
+    lines = payments.step(root, link, lambda: None, now=NOW + timedelta(minutes=27))
+    assert len(lines) == 1 and lines[0].startswith("Last call")

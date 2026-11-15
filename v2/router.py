@@ -31,7 +31,8 @@ SYSTEM = ("Route one direct message from Michael to his personal assistant. Play
           "invites, free time), mail (find, read, draft, send email), people (someone in his life, birthdays, "
           "prep, addresses), notes (reminders, notes, what he said before), research (look into, research, what's new in, "
           "a fact to check on the web, a known fault or recall), general (chat, news, anything else the "
-          "others don't cover), other (training, sleep, money accounts and taxes, YouTube, his Discord server and its channels, opening or reviewing an email attachment or a file, web pages and forms, shopping and prices). "
+          "others don't cover), other (training, sleep, money accounts and taxes, YouTube, his Discord server and its channels, opening or reviewing an email attachment or a file, web pages and forms, shopping and prices, building or changing Juno herself: a new feature, a fix, a "
+          "suggestion of yours he says yes to, 'build it', 'make that change', 'put it on the build list'). "
           "A bill, receipt or any question about an email is mail. A follow-up like 'move that to 4', 'remove it' "
           "or 'send it' keeps the previous playbook and needs tools. A short answer like 'I did', 'yes' or 'the "
           "second one' answers your last message to him: route by what that message was about.")

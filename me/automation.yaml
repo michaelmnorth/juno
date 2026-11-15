@@ -17,4 +17,5 @@ actions:
   memory.write:           {mode: ask,   note: "me/, learnings/, people/, CONTEXT.md; never auto when unattended"}
   discord.channel:        {mode: auto_notify, note: "Michael 2026-11-11: full control of his Discord server: channels (create, rename, topic, move, archive) and the server name, icon and banner with tools/discord_admin.py; Juno says what she changed. No delete exists; archive moves a channel into Archive."}
   payment.link:           {mode: ask,   note: "Michael 2026-11-15: pay for one purchase through Stripe Link. Always his tap, then his passkey in the Link app; never auto, never Always. Caps and allowed stores in me/payments.yaml. Code types the one-time card; no model sees it."}
+  build.start:            {mode: ask,   note: "Michael 2026-11-15: a yes in his own DM to a change to Juno starts a Claude Code cloud session at once (tools/build_queue.py --named); anything else gets a Start build card. It opens a draft PR only; merging stays his. Never auto from a timer."}
   money.any:              {mode: never, note: "Transfers, trades and moving money between accounts. No tool exists. Do not create one."}

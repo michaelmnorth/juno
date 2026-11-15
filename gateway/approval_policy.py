@@ -38,6 +38,9 @@ EXECUTABLE = {
     # Payments run in the bridge's own code (gateway/payments.py): Link asks Michael for his passkey, then code types
     # the one-time card into the checkout. Never auto, never Always, no tool for any model.
     "payment.link": (),
+    # A build starts a Claude Code cloud session in the bridge's own code (gateway/builds.py); the session works on
+    # its own branch and opens a draft PR. Nothing merges and no model is resumed.
+    "build.start": (),
 }
 # "Always allow" is offered only where a standing rule stays narrow: holds on his own calendar, and sends to the
 # exact same recipients. Never for installs, money, or events that invite people.
@@ -141,6 +144,8 @@ def audit(state: Path, event: str, entry: dict, note: str = "") -> None:
             "class": entry.get("action_class"), "summary": entry.get("summary", "")[:200], "note": note[:300]}
     with (state / "audit.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+    import activity_log  # the readable daily log the project's coordinator reads (gateway/activity_log.py)
+    activity_log.audit_line(state.parent, event, line["summary"], line["note"])
 
 
 def signal(state: Path, kind: str, entry: dict, **extra) -> None:
@@ -174,6 +179,7 @@ YES = {
     "subagent.install": ("Yes, install", [("Show files", "showfiles")]),
     "web.form.submit": ("Yes, submit", []),
     "payment.link": ("Pay", []),
+    "build.start": ("Start build", []),
 }
 CHANGES = {
     "calendar.event.create": "Adds an event to your calendar and emails the invite",
@@ -183,6 +189,8 @@ CHANGES = {
     "web.form.submit": "Submits this form in Juno's own browser. A sent form can't be taken back",
     "payment.link": ("Asks Link for a one-time card for exactly this amount and store. You approve it with your "
                      "passkey in the Link app; then Juno's code fills the checkout. A payment can't be taken back"),
+    "build.start": ("Starts a Claude Code session in the cloud on your Max plan. It works on its own branch and opens a "
+                    "draft pull request; nothing merges without you"),
 }
 FIELDS_MAX = 1900  # one Slack field holds 2000 characters
 
