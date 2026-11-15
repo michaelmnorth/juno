@@ -111,7 +111,18 @@
       "mcp__claude_ai_Claude_Docs__update",
       "mcp__claude_ai_Spotify__generate_playlist",
       "mcp__claude_ai_Spotify__remove_from_library",
-      "mcp__claude_ai_Spotify__save_to_library"
+      "mcp__claude_ai_Spotify__save_to_library",
+      "Bash(link-cli*)",
+      "PowerShell(link-cli*)",
+      "Bash(*link-cli*)",
+      "PowerShell(*link-cli*)",
+      "Read(state/pay/**)",
+      "Edit(state/pay/**)",
+      "Write(state/pay/**)",
+      "Edit(state/payment-requests.json)",
+      "Write(state/payment-requests.json)",
+      "Edit(me/payments.yaml)",
+      "Write(me/payments.yaml)"
     ],
     "ask": [
       "Edit(CLAUDE.md)",

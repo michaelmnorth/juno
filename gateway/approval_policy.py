@@ -35,6 +35,9 @@ EXECUTABLE = {
     "subagent.install": (),
     # Form submits run in the bridge's own browser run with a one-time pass (gateway/browser_agent.py); never auto.
     "web.form.submit": (),
+    # Payments run in the bridge's own code (gateway/payments.py): Link asks Michael for his passkey, then code types
+    # the one-time card into the checkout. Never auto, never Always, no tool for any model.
+    "payment.link": (),
 }
 # "Always allow" is offered only where a standing rule stays narrow: holds on his own calendar, and sends to the
 # exact same recipients. Never for installs, money, or events that invite people.
@@ -170,6 +173,7 @@ YES = {
     "calendar.hold": ("Yes, add it", [("Always add holds", "always"), ("Other time", "othertime")]),
     "subagent.install": ("Yes, install", [("Show files", "showfiles")]),
     "web.form.submit": ("Yes, submit", []),
+    "payment.link": ("Pay", []),
 }
 CHANGES = {
     "calendar.event.create": "Adds an event to your calendar and emails the invite",
@@ -177,6 +181,8 @@ CHANGES = {
     "calendar.hold": "Adds a hold to your calendar only. No one is told",
     "subagent.install": "Installs a new agent into .claude/agents",
     "web.form.submit": "Submits this form in Juno's own browser. A sent form can't be taken back",
+    "payment.link": ("Asks Link for a one-time card for exactly this amount and store. You approve it with your "
+                     "passkey in the Link app; then Juno's code fills the checkout. A payment can't be taken back"),
 }
 FIELDS_MAX = 1900  # one Slack field holds 2000 characters
 
@@ -318,6 +324,10 @@ def blocks(entry: dict, trust_label: str | None = None, root: Path | None = None
                            for f in entry.get("fields") or []) or "(none)"
         facts.append(_field("Values", values[:FIELDS_MAX]))
         facts.append(_field("Button", _plain(entry.get("submit_label"))))
+    if cls == "payment.link":
+        facts.append(_field("Store", f"{_plain(entry.get('store'))}\n{_plain(entry.get('url'))}"))
+        facts.append(_field("Amount", f"${int(entry.get('amount_cents') or 0) / 100:,.2f} (tax and fees included)"))
+        facts.append(_field("Mode", "Real card" if entry.get("live") else "Test mode: nothing is charged"))
     if cls.startswith("calendar."):
         facts.append(_field("Invites", "\n".join(f"{a} ({who_line(a, root)})" for a in who) or "No one"))
     if cls in CHANGES:

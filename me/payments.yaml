@@ -1,0 +1,9 @@
+# Paying for things through Stripe Link (Michael 2026-11-15: "go ahead"). Michael edits this file; Juno only reads it.
+# Every purchase takes two of his own steps: a tap on the Discord card, then his passkey in the Link app.
+# The card number goes from Link straight into the checkout page by code; the model never sees it.
+live: false              # false = Link test mode: test cards, nothing is charged. Set true when he's ready for real ones.
+per_purchase_usd: 75     # the most one purchase may cost, tax and fees included (Link's own limit is $500)
+daily_usd: 150           # the most all purchases in one day may add up to (Eastern days; Link's own limit is $500)
+# Stores Juno may pay without him naming the store himself, as the site's domain. Any other store needs his own DM
+# to name it ("buy the tickets on eventbrite"), and still gets the card and the passkey step.
+stores: []
