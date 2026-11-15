@@ -92,8 +92,12 @@ def test_missing_config_is_the_strictest(tmp_path):
 # --- Link and the checkout, faked ----------------------------------------------------------------
 
 class FakeLink:
-    def __init__(self, statuses=("approved",)):
+    def __init__(self, statuses=("approved",), action=None, card=None):
         self.statuses, self.created, self.cancelled = list(statuses), [], []
+        self.action, self._card = action or {}, card
+
+    def next_action(self, spend_id):
+        return dict(self.action)
 
     def create(self, entry):
         self.created.append(entry)
@@ -103,6 +107,8 @@ class FakeLink:
         return self.statuses.pop(0)
 
     def card(self, spend_id):
+        if isinstance(self._card, Exception):
+            raise self._card
         return dict(CARD)
 
     def cancel(self, spend_id):
@@ -236,6 +242,78 @@ def test_approval_runs_out_or_is_declined(tmp_path):
     link2 = FakeLink(["denied"])
     root2 = requested(tmp_path / "b", link2)
     assert "wasn't approved" in payments.step(root2, link2, lambda: None, now=NOW)[0]
+
+
+CHECK = {"type": "partner_auth_challenge", "resolution": "auto_resume",
+         "action_url": "https://app.link.com/verify/abc"}
+
+
+def test_extra_check_is_sent_once_then_pays(tmp_path):
+    link = FakeLink(["requires_action", "requires_action", "approved"], action=CHECK)
+    root = requested(tmp_path, link)
+    first = payments.step(root, link, lambda: FakeBrowser(), now=NOW + timedelta(minutes=1))
+    assert len(first) == 1 and "one more check" in first[0] and CHECK["action_url"] in first[0]
+    assert payments.step(root, link, lambda: FakeBrowser(), now=NOW + timedelta(minutes=2)) == []  # told once
+    assert payments.step(root, link, lambda: FakeBrowser(), now=NOW + timedelta(minutes=3))[0].startswith("Paid")
+
+
+def test_extra_check_that_needs_a_new_request_stops_it(tmp_path):
+    act = {**CHECK, "resolution": "create_new_spend_request_after_completion"}
+    link = FakeLink(["requires_action"], action=act)
+    root = requested(tmp_path, link)
+    line = payments.step(root, link, lambda: None, now=NOW)[0]
+    assert "stopped this one" in line and "nothing was charged" in line and link.cancelled == ["lsrq_1"]
+    assert pay_queue.load(root / "state" / "payment-requests.json")[0]["status"] == "stopped"
+
+
+def test_only_link_pages_are_passed_on():
+    assert payments.link_url("https://app.link.com/x") == "https://app.link.com/x"
+    assert payments.link_url("https://checkout.stripe.com/y") == "https://checkout.stripe.com/y"
+    for bad in ("http://app.link.com/x", "https://link.com.evil.example/x", "https://evil.example/link.com"):
+        assert payments.link_url(bad) == ""
+
+
+def test_expired_card_is_refused_before_typing(tmp_path):
+    def run(cmd, **kw):
+        Path(cmd[cmd.index("--output-file") + 1]).write_text(
+            json.dumps({"card": {**CARD, "valid_until": int(NOW.timestamp()) + 60}}), encoding="utf-8")
+        return NS(returncode=0, stdout="{}", stderr="")
+    link = payments.Link("link-cli", tmp_path / "pay", test=True, run=run)
+    with pytest.raises(payments.CardExpired):
+        link.card("lsrq_1", now=NOW)
+    assert list((tmp_path / "pay").glob("*")) == []
+    fresh = {**CARD, "valid_until": "2026-11-15T18:00:00Z"}
+    run2 = lambda cmd, **kw: (Path(cmd[cmd.index("--output-file") + 1]).write_text(  # noqa: E731
+        json.dumps({"card": fresh}), encoding="utf-8"), NS(returncode=0, stdout="{}", stderr=""))[1]
+    assert payments.Link("link-cli", tmp_path / "pay", test=True, run=run2).card("lsrq_1", now=NOW)["cvc"] == "321"
+
+
+def test_expired_card_cancels_and_presses_nothing(tmp_path):
+    link = FakeLink(["approved"], card=payments.CardExpired("the one-time card from Link had already run out"))
+    root = requested(tmp_path, link)
+    browser = FakeBrowser()
+    line = payments.step(root, link, lambda: browser, now=NOW)[0]
+    assert "had already run out" in line and "nothing was charged" in line
+    assert link.cancelled == ["lsrq_1"] and not browser.calls
+
+
+def test_windows_runs_node_on_links_script_not_the_cmd_shim(tmp_path):
+    npm = tmp_path / "npm"
+    pkg = npm / "node_modules" / "@stripe" / "link-cli"
+    (pkg / "dist").mkdir(parents=True)
+    (pkg / "dist" / "cli.js").write_text("", encoding="utf-8")
+    (pkg / "package.json").write_text(json.dumps({"bin": {"link-cli": "./dist/cli.js"}}), encoding="utf-8")
+    shim = str(npm / "link-cli.CMD")
+    which = {"link-cli": shim, "node": r"C:\node\node.exe"}.get
+    cmd = payments.find_link({}, which=which, windows=True)
+    assert cmd[0] == r"C:\node\node.exe" and cmd[1].endswith("cli.js") and not cmd[1].lower().endswith(".cmd")
+    (pkg / "dist" / "cli.js").unlink()
+    assert payments.find_link({}, which=which, windows=True) is None  # never falls back to the shim
+    assert payments.find_link({}, which={"link-cli": "/usr/bin/link-cli"}.get, windows=False) == ["/usr/bin/link-cli"]
+    seen = []
+    payments.Link(["node", "cli.js"], tmp_path, test=True,
+                  run=lambda c, **kw: seen.append(c) or NS(returncode=0, stdout="{}", stderr="")).status("lsrq_1")
+    assert seen[0][:4] == ["node", "cli.js", "spend-request", "retrieve"]
 
 
 # --- reading the checkout page -------------------------------------------------------------------

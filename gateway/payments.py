@@ -23,6 +23,7 @@ import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "tools") not in sys.path:
@@ -45,19 +46,73 @@ def money(cents: int) -> str:
     return f"${cents / 100:,.2f}"
 
 
-def find_link(env: dict | None = None) -> str | None:
+class CardExpired(LinkError):
+    pass
+
+
+LINK_HOSTS = ("link.com", "stripe.com")
+STOP_RESOLUTIONS = ("create_new_spend_request", "create_new_spend_request_after_completion",
+                    "reauthorize_with_additional_scope")
+
+
+def find_link(env: dict | None = None, which=shutil.which, windows: bool | None = None) -> list[str] | None:
+    """The command that runs link-cli. On Windows npm installs a .cmd shim, and cmd.exe reads its arguments again
+    (an "&" in a store name would be taken as a second command), so Juno runs node on Link's own script instead, as
+    Stripe's skill says. No script found: None, and nothing is asked of Link."""
     env = os.environ if env is None else env
-    return env.get("JUNO_LINK_CLI") or shutil.which("link-cli")
+    windows = os.name == "nt" if windows is None else windows
+    found = env.get("JUNO_LINK_CLI") or which("link-cli")
+    if not found:
+        return None
+    shim = Path(found)
+    if not windows or shim.suffix.lower() == ".exe":
+        return [found]
+    package = shim.parent / "node_modules" / "@stripe" / "link-cli"
+    try:
+        bin_ = json.loads((package / "package.json").read_text(encoding="utf-8")).get("bin")
+    except (OSError, ValueError):
+        return None
+    rel = bin_.get("link-cli") if isinstance(bin_, dict) else bin_
+    script = package / rel if isinstance(rel, str) else None
+    node = str(shim.parent / "node.exe") if (shim.parent / "node.exe").exists() else which("node")
+    if script is None or not script.is_file() or not node:
+        return None
+    return [str(node), str(script)]
+
+
+def link_url(url: str) -> str:
+    """Only a Link or Stripe https page goes to Michael; anything else becomes "open your Link app"."""
+    try:
+        parts = urlparse(url)
+    except ValueError:
+        return ""
+    host = (parts.hostname or "").lower()
+    ok = parts.scheme == "https" and any(host == h or host.endswith("." + h) for h in LINK_HOSTS)
+    return url if ok else ""
+
+
+def _until(value) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 class Link:
     """The few link-cli commands Juno uses. `run` is subprocess.run (a fake in tests)."""
 
-    def __init__(self, binary: str, folder: Path, test: bool, run=subprocess.run):
-        self.binary, self.folder, self.test, self._run = binary, Path(folder), test, run
+    def __init__(self, binary: str | list[str], folder: Path, test: bool, run=subprocess.run):
+        self.binary = [binary] if isinstance(binary, str) else list(binary)
+        self.folder, self.test, self._run = Path(folder), test, run
 
     def _call(self, *args: str) -> dict:
-        done = self._run([self.binary, *args, "--format", "json"], capture_output=True, text=True, encoding="utf-8",
+        done = self._run([*self.binary, *args, "--format", "json"], capture_output=True, text=True, encoding="utf-8",
                          timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if done.returncode != 0:
             raise LinkError((done.stdout or done.stderr or "link-cli failed").strip()[-300:])
@@ -78,8 +133,14 @@ class Link:
     def status(self, spend_id: str) -> str:
         return str(self._call("spend-request", "retrieve", spend_id).get("status") or "")
 
-    def card(self, spend_id: str) -> dict:
-        """The card, read from Link's 0600 file and the file removed at once. Stdout only ever has it redacted."""
+    def next_action(self, spend_id: str) -> dict:
+        """What Link is waiting on (a bank code, an ID check), or {} when nothing is shown."""
+        act = self._call("spend-request", "retrieve", spend_id, "--next-action").get("next_action")
+        return act if isinstance(act, dict) else {}
+
+    def card(self, spend_id: str, now: datetime | None = None) -> dict:
+        """The card, read from Link's 0600 file and the file removed at once. Stdout only ever has it redacted.
+        A card whose valid_until has passed (or is under two minutes off) is refused before any typing."""
         self.folder.mkdir(parents=True, exist_ok=True)
         path = self.folder / f"{spend_id}-{uuid.uuid4().hex[:6]}.json"
         try:
@@ -90,6 +151,9 @@ class Link:
         card = data.get("card") if isinstance(data.get("card"), dict) else data
         if not all(card.get(k) for k in ("number", "cvc", "exp_month", "exp_year")):
             raise LinkError("Link's card came back incomplete")
+        until = _until(card.get("valid_until"))
+        if until is not None and until <= (now or datetime.now(timezone.utc)).timestamp() + 120:
+            raise CardExpired("the one-time card from Link had already run out")
         return card
 
     def cancel(self, spend_id: str) -> None:
@@ -196,6 +260,12 @@ def step(root: Path, link: Link | None, open_browser, path: Path | None = None, 
             status = link.status(req["spend_id"])
         except LinkError:
             continue  # try again on the next pass
+        if status == "requires_action":
+            note, stopped = needs_you(req, link, path)
+            if note:
+                lines.append(note)
+            if stopped:
+                continue
         if status in WAITING:
             asked = datetime.fromisoformat(req.get("requested_at") or now.isoformat())
             if now - asked > APPROVAL_WINDOW:
@@ -213,6 +283,35 @@ def step(root: Path, link: Link | None, open_browser, path: Path | None = None, 
     return lines
 
 
+def needs_you(req: dict, link: Link, path: Path) -> tuple[str | None, bool]:
+    """Link is holding the card until Michael does a check (a bank code, an ID check). He gets the link once per
+    check. When Link says this request can't go on after it, it is cancelled and he asks again.
+    Returns (line for Michael or None, whether the request was stopped)."""
+    try:
+        act = link.next_action(req["spend_id"])
+    except LinkError:
+        return None, False
+    if not act:
+        return None, False
+    url = link_url(str(act.get("action_url") or ""))
+    where = f" Do it here: {url}" if url else " Open your Link app to do it."
+    store, amount = req["store"], money(req["amount_cents"])
+    if act.get("resolution") in STOP_RESOLUTIONS:
+        link.cancel(req["spend_id"])
+        pay_queue.update(req["id"], path, status="stopped", note=f"Link needs {act.get('type') or 'a check'}")
+        if act.get("resolution") == "reauthorize_with_additional_scope":
+            return (f"Link wants you to sign in to it again before it will pay {store}, so I stopped this one and "
+                    "nothing was charged. Ask me to redo the Link sign-in, then ask again. 🔐"), True
+        return (f"Link needs one more check from you before it will pay {store}, so I stopped this one and nothing "
+                f"was charged.{where} Then ask me again. 🔐"), True
+    seen = f"{act.get('type')}|{url}"
+    if req.get("action_seen") == seen:
+        return None, False
+    pay_queue.update(req["id"], path, action_seen=seen)
+    return (f"Link needs one more check from you before it releases the card for {store} ({amount}).{where} "
+            "I'll finish the checkout once it's done. 🔐"), False
+
+
 def pay(req: dict, link: Link, open_browser, path: Path, audit=None) -> str:
     import checkout
     amount, store = money(req["amount_cents"]), req["store"]
@@ -224,6 +323,8 @@ def pay(req: dict, link: Link, open_browser, path: Path, audit=None) -> str:
             outcome = checkout.Outcome(False, False, "the browser isn't set up on this PC")
         else:
             outcome = checkout.complete(browser, req["url"], card, req["amount_cents"], store)
+    except CardExpired as exc:
+        outcome = checkout.Outcome(False, False, str(exc))
     except Exception as exc:  # never with card text: exceptions here are ours or Link's, both card-free
         outcome = checkout.Outcome(False, False, f"something broke before I pressed pay ({type(exc).__name__})")
     finally:
