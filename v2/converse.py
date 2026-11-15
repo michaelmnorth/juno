@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import assembler, config, lanes, router, tools
+from . import assembler, config, lanes, max_lanes, router, tools
 from .policy import Policy, new_run
 from .store import Store
 
@@ -199,6 +199,17 @@ class Engine:
 
     def _run_lane(self, client, lane: str, built, run, specs, wants_draft: bool = True,
                   schema: dict | None = lanes.REPLY_SCHEMA) -> lanes.LaneResult:
+        if isinstance(client, max_lanes.MaxClient):  # Michael's Max plan through the Claude Code CLI
+            if lane == "l1":
+                res = max_lanes.call(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
+                                     system=built.system, messages=built.messages, schema=lanes.REPLY_SCHEMA,
+                                     job="dm-converse")
+                run.calls += 1
+                run.cost += res.cost
+                return res
+            return max_lanes.loop(client, self, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
+                                  system=built.system, messages=built.messages, run=run, specs=specs,
+                                  wants_draft=wants_draft, research=schema is None)
         if lane == "l1":
             res = lanes.call(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
                              system=built.system, messages=built.messages, schema=lanes.REPLY_SCHEMA,
@@ -206,6 +217,14 @@ class Engine:
             run.calls += 1
             run.cost += res.cost
             return res
+        execute = self.executor(client, run, specs, wants_draft)
+        return lanes.loop(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
+                          system=built.system, messages=built.messages, tools=built.tools, run=run, execute=execute,
+                          max_tokens=config.MAX_OUTPUT["converse"], schema=schema)
+
+    def executor(self, client, run, specs, wants_draft: bool = True):
+        """`execute(name, args) -> (content, is_error)`: every tool call goes through the policy engine here, on
+        either backend (the Max plan's tool server calls this too, v2/mcp_tools.py)."""
         tctx = _ToolCtx(self, run, client)
         by_name = {s.name: s for s in specs}
         seen: dict[str, str] = {}
@@ -253,9 +272,7 @@ class Engine:
                 seen[key] = out
             return out, result.is_error
 
-        return lanes.loop(client, model=config.MODELS["converse"], effort=config.EFFORT["converse"],
-                          system=built.system, messages=built.messages, tools=built.tools, run=run, execute=execute,
-                          max_tokens=config.MAX_OUTPUT["converse"], schema=schema)
+        return execute
 
     def _reply_text(self, res: lanes.LaneResult, run) -> str:
         cards = [p["summary"] for p in run.proposals]

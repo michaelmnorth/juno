@@ -50,3 +50,17 @@ def _fresh_conversation_clock():
     slack_bridge._last_exchange.clear()
     yield
     slack_bridge._last_exchange.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_cli_model_call(monkeypatch):
+    """No test reaches the real Claude Code CLI through the engine: the Max-plan client refuses unless a test gives
+    it a fake runner, and the backend defaults to the old API path (no key, so DMs hand off as they used to)."""
+    sys.path.insert(0, str(ROOT)) if str(ROOT) not in sys.path else None
+    from v2 import config, max_lanes
+
+    def refuse(*a, **k):
+        raise RuntimeError("tests never reach the real Claude Code CLI")
+
+    monkeypatch.setattr(config, "BACKEND", "api")
+    monkeypatch.setattr(max_lanes, "_default_runner", lambda: refuse)
