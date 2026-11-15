@@ -969,6 +969,34 @@ class Bridge:
         heartbeat("approval", ok, line[:120])
         return line
 
+    def start_payment(self, entry: dict, state: Path) -> str:
+        """A tapped Pay card (gateway/payments.py): rules again, then Link asks him for his passkey."""
+        import payments
+        try:
+            line = payments.start(self.root, entry, payments.link_for(self.root))
+        except Exception as exc:
+            approval_policy.audit(state, "payment_failed", entry, type(exc).__name__)
+            return "The payment broke before Link was asked, so nothing was charged. 🙃"
+        approval_policy.audit(state, "payment_requested", entry, line[:200])
+        approval_policy.signal(state, "payment.requested", entry)
+        return line
+
+    def deny_payment(self, entry: dict) -> str:
+        import payments
+        payments.deny(self.root, entry)
+        approval_policy.signal(self.root / "state", "payment.skipped", entry)
+        return "Skipped. Nothing was charged. 👍"
+
+    def payments_step(self) -> list[str]:
+        """New payment requests → cards; requests Michael approved in Link → checkout. Code only."""
+        import payments
+        state = self.root / "state"
+        audit = lambda event, entry, note: approval_policy.audit(state, event, entry, note)  # noqa: E731
+        lines = payments.process(self.root, self.approvals.append, audit=audit)
+        lines += payments.step(self.root, payments.link_for(self.root), lambda: payments.browser_for(self.root),
+                               audit=audit)
+        return lines
+
     def fill_forms(self) -> list[str]:
         """Queued form requests → headless fill runs → cards (the approvals watcher posts them)."""
         import browser_agent
@@ -1015,6 +1043,8 @@ class Bridge:
             return self.send_approved_email(entry, state)
         if decision == "approved" and entry.get("action_class") == "web.form.submit":
             return self.submit_form(entry, state)
+        if entry.get("action_class") == "payment.link":  # code only, both ways: no model session is resumed
+            return self.start_payment(entry, state) if decision == "approved" else self.deny_payment(entry)
         if decision == "approved" and entry.get("action_class") == "subagent.install":
             done = self.install(entry)
             tools, env = (), {}
@@ -1558,7 +1588,7 @@ def browser_watcher(client, bridge: Bridge, interval: int = 15) -> None:
     while True:
         try:
             if not brakes.paused(bridge.root):
-                for line in bridge.fill_forms():
+                for line in bridge.fill_forms() + bridge.payments_step():  # one browser at a time
                     post_to_michael(client, bridge, line)
         except Exception as exc:  # keep the watcher alive
             LOG.exception("browser watcher: %s", exc)

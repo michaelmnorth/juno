@@ -15,6 +15,9 @@ math). The last three serve Kin (`relationships`). Their data lives in `data/mai
 `people_match.py` (who in a mail or invite has a profile, and who in Contacts doesn't yet; starter profiles).
 `people_queue.py` (profile notes waiting for Michael's Save tap; the bridge writes them on Save).
 `trust.py` (michael, known, contact or unknown for an address; the bridge labels approval cards with it).
+`pay_queue.py` (Juno's only way to ask to pay for something: store, checkout page, amount, what for; caps and
+allowed stores from `me/payments.yaml` checked in code. The bridge posts a Pay card; his tap and his passkey in Link
+pay it, and `gateway/payments.py` and `gateway/checkout.py` type the one-time card in code, never through a model).
 `usage_report.py` (tokens per request and per Eastern day from `state/costs.jsonl`, with `what` each run was for
 and plain hints; no model. The daily token optimizer in `gateway/daily_jobs.py` reads it).
 `observed.py` (life cycle of Juno's silent notes: confidence, stale retirement, duplicates, size).
