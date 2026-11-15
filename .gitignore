@@ -61,6 +61,7 @@ me/*
 !me/owner.example.json
 !me/automation.yaml
 !me/proactivity.yaml
+!me/payments.yaml
 domains/*/CONTEXT.md
 domains/admin/email-rules.md
 learnings/*
