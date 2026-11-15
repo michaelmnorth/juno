@@ -47,6 +47,23 @@ class Decision:
     reason: str = ""
 
 
+def run_to_dict(run: RunState) -> dict:
+    d = {k: getattr(run, k) for k in ("run_id", "run_class", "intent", "tainted", "tool_tainted", "cost", "calls",
+                                      "proposals", "touched", "done")}
+    d["tools"] = list(run.tools)
+    d["budget"] = {"dollars": run.budget.dollars, "calls": run.budget.calls}
+    return d
+
+
+def run_from_dict(d: dict) -> RunState:
+    return RunState(d["run_id"], d["run_class"], d["intent"], tuple(d.get("tools") or ()),
+                    config.Budget(float(d["budget"]["dollars"]), int(d["budget"]["calls"])),
+                    tainted=bool(d.get("tainted")), tool_tainted=bool(d.get("tool_tainted")),
+                    cost=float(d.get("cost") or 0), calls=int(d.get("calls") or 0),
+                    proposals=list(d.get("proposals") or []), touched=list(d.get("touched") or []),
+                    done=list(d.get("done") or []))
+
+
 def new_run(run_class: str, intent: str, tools: list[ToolSpec], budget: config.Budget, tainted: bool) -> RunState:
     return RunState(f"r-{uuid.uuid4().hex[:10]}", run_class, intent, tuple(t.name for t in tools), budget,
                     tainted=tainted)

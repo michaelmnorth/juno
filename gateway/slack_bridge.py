@@ -36,6 +36,7 @@ import approval_policy  # noqa: E402
 import brakes  # noqa: E402
 import brief_blocks  # noqa: E402
 import cards  # noqa: E402
+import daily_jobs  # noqa: E402
 import installer  # noqa: E402
 import lessons  # noqa: E402
 import ping_policy  # noqa: E402
@@ -108,7 +109,7 @@ JOB_PROMPTS = {
         "Changes are proposals only: write nothing to me/ or learnings/; Michael's Save tap is the yes.")),
 }
 # Jobs that run without a coordinator session: Python plus at most one words-only model call.
-LEAN_JOBS = ("coach-sheet",)
+LEAN_JOBS = ("coach-sheet", *daily_jobs.JOBS)
 SILENT_MARKER = "NOTHING_TO_REPORT"
 # Session handoff (docs/04 proposal 7): when a DM session is closed after 12 h of quiet, the old session writes this
 # note before it goes, and the next session starts from it.
@@ -181,6 +182,10 @@ def anchor_schedule(cfg: dict) -> list[dict]:
     if "coach_sheet_nightly" in anchors:
         h, m = hm(anchors["coach_sheet_nightly"])
         jobs.append({"job": "coach-sheet", "trigger": {"hour": h, "minute": m, "timezone": tz}})
+    for key, job in (("token_optimizer", "token-optimizer"), ("research_scan", "research-scan")):
+        if key in anchors:
+            h, m = hm(anchors[key])
+            jobs.append({"job": job, "trigger": {"hour": h, "minute": m, "timezone": tz}})
     return jobs
 
 
@@ -823,6 +828,8 @@ class Bridge:
             return None
         if job == "coach-sheet":
             return self._coach_sheet(force)
+        if job in daily_jobs.JOBS:
+            return self._daily_job(job)
         prompt = JOB_PROMPTS[job]
         cfg = load_proactivity(self.root)
         state = self.root / "state"
@@ -842,6 +849,21 @@ class Bridge:
         if verdict is None:  # an older-style reply: keep the marker behavior
             return None if SILENT_MARKER in result.text or in_quiet_hours(cfg) else result.text
         return ping_policy.decide_sweep(verdict, cfg, state, quiet=in_quiet_hours(cfg))
+
+    def _daily_job(self, job: str) -> str | None:
+        """Lean daily job (gateway/daily_jobs.py). Writes only its own files under state/, so no RUN_LOCK: a long
+        research scan never makes a DM wait."""
+        state = self.root / "state"
+        if self.dry_run:
+            return None
+        try:
+            text = daily_jobs.run_job(job, self._run, self.root)
+        except Exception as exc:  # bookkeeping jobs: report once, never take the bridge down
+            heartbeat(job, False, type(exc).__name__)
+            return ping_policy.failure_notice(job, False, f"{type(exc).__name__}: {exc}"[:500], state)
+        heartbeat(job, True, (text or "nothing to report")[:120])
+        ping_policy.failure_notice(job, True, "", state)
+        return None if text and in_quiet_hours(load_proactivity(self.root)) else text
 
     def _with_spend_notice(self, text: str | None) -> str | None:
         notice = brakes.spend_notice(self.root)

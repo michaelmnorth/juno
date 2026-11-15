@@ -152,25 +152,34 @@ def run(prompt: str, *, cwd: Path = ROOT, resume: str | None = None, unattended:
         max_turns: int | None = None, timeout: int = 900, dry_run: bool = False, claude_bin: str | None = None,
         allowed_tools: tuple[str, ...] = (), env_extra: dict | None = None, job: str = "other",
         lean_system: str | None = None, effort: str | None = None, mcp_config: Path | None = None,
-        settings_file: Path | None = None) -> RunResult:
+        settings_file: Path | None = None, json_schema: dict | None = None,
+        builtin_tools: tuple[str, ...] = (), what: str = "") -> RunResult:
     """lean_system set: a lean words-only call with that system prompt (see LEAN_FLAGS).
     mcp_config set (with lean_system): an agent run whose only tools are that MCP server's `allowed_tools`, with
     no built-in tools, no other MCP server, no project CLAUDE.md or settings, and `settings_file` for its hooks
-    (the browser agent, gateway/browser_agent.py)."""
+    (the browser agent, gateway/browser_agent.py, and the engine's tool runs, v2/max_lanes.py).
+    json_schema set: the reply is checked against it and arrives as `raw["structured_output"]`.
+    builtin_tools set (lean runs only): those built-in tools instead of none, e.g. WebSearch for research.
+    what: a few plain words on what the run was for, kept on its usage line (tools/usage_report.py)."""
     permission_mode = permission_mode or os.environ.get("CLAUDE_PERMISSION_MODE", "acceptEdits")
     model = model or os.environ.get("CLAUDE_MODEL") or None
     binary = claude_bin or ("claude" if dry_run else find_claude())
     # allowed_tools grants tools outside the settings allow list to this one run only (an approved action).
     prompt = f"{now_line()}\n{prompt}"
     extra = (("--allowedTools", ",".join(allowed_tools)) if allowed_tools else ()) + tool_flags()
+    lean = LEAN_FLAGS if not builtin_tools else ("--tools", ",".join(builtin_tools), *LEAN_FLAGS[2:])
     if lean_system is not None and mcp_config is not None:
         if not allowed_tools or settings_file is None:
             raise ValueError("an MCP agent run needs its allowed tools and its settings file (the gate hook)")
-        extra = ("--system-prompt", lean_system, *LEAN_FLAGS, "--mcp-config", str(mcp_config), "--settings",
+        extra = ("--system-prompt", lean_system, *lean, "--mcp-config", str(mcp_config), "--settings",
                  str(settings_file), "--allowedTools", ",".join(allowed_tools))
     elif lean_system is not None:
-        extra = ("--system-prompt", lean_system, *LEAN_FLAGS)
+        # Built-in tools a lean run is given (web search for research) are also granted, or -p would refuse them.
+        granted = ("--allowedTools", ",".join(allowed_tools)) if allowed_tools else ()
+        extra = ("--system-prompt", lean_system, *lean, *granted)
         max_turns = max_turns or 1
+    if json_schema is not None:
+        extra = (*extra, "--json-schema", json.dumps(json_schema, separators=(",", ":")))
     cmd = build_command(binary, prompt, resume=resume, permission_mode=permission_mode, model=model,
                         max_budget_usd=max_budget_usd, max_turns=max_turns, extra=extra, effort=effort)
     env = child_env()
@@ -189,7 +198,7 @@ def run(prompt: str, *, cwd: Path = ROOT, resume: str | None = None, unattended:
                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
         result = RunResult(text=f"Claude run timed out after {timeout}s.", session_id=resume, is_error=True, command=cmd)
-        log_cost(cwd, job, model, result)
+        log_cost(cwd, job, model, result, what)
         return result
     result = parse_output(proc.stdout)
     result.command = cmd
@@ -198,8 +207,17 @@ def run(prompt: str, *, cwd: Path = ROOT, resume: str | None = None, unattended:
         err = (proc.stderr or "").strip()
         if err and result.text in ("(no output)", "(empty reply)"):
             result.text = err[-1500:]
-    log_cost(cwd, job, model, result)
+    log_cost(cwd, job, model, result, what)
     return result
+
+
+WHAT_MAX = 120
+
+
+def clip_what(text: str) -> str:
+    """One line, short: the usage log says what a run was for, never carries its content."""
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= WHAT_MAX else text[:WHAT_MAX - 1].rstrip() + "…"
 
 
 USAGE_KEYS = {"input_tokens": "in", "cache_creation_input_tokens": "cache_write", "cache_read_input_tokens": "cache_read",
@@ -223,7 +241,7 @@ def _session_total(path: Path, session_id: str | None) -> float:
     return last
 
 
-def log_cost(cwd: Path, job: str, model: str | None, result: RunResult) -> None:
+def log_cost(cwd: Path, job: str, model: str | None, result: RunResult, what: str = "") -> None:
     """One line per real run in state/costs.jsonl, summed by the weekly reflection. Never breaks a run.
     `cost_usd` is this run's own cost; `session_total_usd` is what the CLI reported for the session so far."""
     try:
@@ -238,7 +256,8 @@ def log_cost(cwd: Path, job: str, model: str | None, result: RunResult) -> None:
                 "session_total_usd": total, "session_id": result.session_id,
                 "tokens": {short: usage[k] for k, short in USAGE_KEYS.items() if k in usage} or None,
                 "models": sorted(used) or None,
-                "duration_ms": result.duration_ms, "turns": raw.get("num_turns"), "is_error": result.is_error}
+                "duration_ms": result.duration_ms, "turns": raw.get("num_turns"), "is_error": result.is_error,
+                "what": clip_what(what or job)}
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(line) + "\n")

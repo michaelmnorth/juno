@@ -51,6 +51,9 @@ FIRST_REQUEST_TARGET = 8000
 TOOL_RESULT_TOKENS = 800
 MAX_OUTPUT = {"router": 512, "reader": 1024, "converse": 4096}
 THREAD_IDLE_HOURS = 24  # a quiet thread closes: its taint clears; summary and working set carry over
+# Where model calls go (Michael 2026-11-15: his Max plan, not API credits). "max": the Claude Code CLI on his own
+# sign-in (v2/max_lanes.py). "api": the Messages API with a key; kept only as a rollback until the old path retires.
+BACKEND = os.environ.get("JUNO_V2_BACKEND", "max").lower()
 DEFAULT_ENGINE = "v2"  # every new chat; "use v1" pins one chat to the old engine (DV13)
 RECENT_TURNS = 6
 

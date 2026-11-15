@@ -63,7 +63,7 @@ def route(client, message: str, summary: str, recent: list[str] | None = None,
                          f"Previous playbook: {last_playbook or 'none'}\n"
                          f"Your last message to him (he may be answering it): {answering[:300] or 'none'}\n\n"
                          f"Message: {message}")}],
-                     schema=SCHEMA, max_tokens=config.MAX_OUTPUT["router"])
+                     schema=SCHEMA, max_tokens=config.MAX_OUTPUT["router"], job="dm-router")
     d = res.data
     if not d or d.get("confidence") == "low":
         return FALLBACK, res

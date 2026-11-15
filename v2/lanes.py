@@ -41,6 +41,9 @@ def api_key() -> str:
 
 
 def make_client():
+    if config.BACKEND == "max":  # Michael's Max plan through the Claude Code CLI, no key (v2/max_lanes.py)
+        from .max_lanes import MaxClient
+        return MaxClient()
     import anthropic
     key = api_key()
     if not key:
@@ -147,8 +150,12 @@ def _json_text(resp) -> dict | None:
 
 
 def call(client, *, model: str, effort: str, system: list[dict], messages: list[dict], schema: dict,
-         max_tokens: int) -> LaneResult:
+         max_tokens: int, job: str = "dm") -> LaneResult:
     """L1: one request, structured output. Returns the parsed object."""
+    from . import max_lanes
+    if isinstance(client, max_lanes.MaxClient):
+        return max_lanes.call(client, model=model, effort=effort, system=system, messages=messages, schema=schema,
+                              job=job)
     req = {"model": model, "max_tokens": max_tokens, "system": system, "messages": messages,
            "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}}}
     started = time.monotonic()
@@ -240,7 +247,7 @@ def read(client, message: dict) -> tuple[dict, LaneResult]:
     res = call(client, model=config.MODELS["reader"], effort=config.EFFORT["reader"],
                system=[{"type": "text", "text": READER_SYSTEM}],
                messages=[{"role": "user", "content": f"<email>\n{body}\n</email>"}],
-               schema=READER_SCHEMA, max_tokens=config.MAX_OUTPUT["reader"])
+               schema=READER_SCHEMA, max_tokens=config.MAX_OUTPUT["reader"], job="dm-reader")
     data = res.data or {"category": "other", "asks_for": "other", "due_date": "", "amount": "",
                         "meeting_times": [], "merchant": "", "order_number": "", "order_date": "", "items": [],
                         "delivered_on": "", "suspicious": False, "gist": ""}

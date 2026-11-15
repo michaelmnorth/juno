@@ -32,6 +32,8 @@ create table if not exists ledger (
   tok_tool_results integer, input_tokens integer, cache_write_5m integer, cache_write_1h integer,
   cache_read integer, output_tokens integer, searches integer, cost_usd real, latency_ms integer,
   stop_reason text, tainted integer);
+create table if not exists runs (
+  run_id text primary key, state text not null, updated text not null);
 """
 
 LEDGER_COLS = ("run_id", "call_idx", "ts", "lane", "run_class", "intent", "model", "effort", "tok_tools",
@@ -134,6 +136,16 @@ class Store:
         rows = self._all("select role, text, at, run_id from turns where channel=? order by id desc limit ?",
                          (channel, limit))
         return [dict(r) for r in reversed(rows)]
+
+    # --- run state (shared with the tool server of a Max-plan run, v2/mcp_tools.py) ---------------------------
+    def save_run(self, run_id: str, state: dict) -> None:
+        self._exec("insert into runs (run_id, state, updated) values (?,?,?) on conflict(run_id) do update set "
+                   "state=excluded.state, updated=excluded.updated",
+                   (run_id, json.dumps(state, ensure_ascii=False, default=str), now_iso()))
+
+    def load_run(self, run_id: str) -> dict | None:
+        rows = self._all("select state from runs where run_id=?", (run_id,))
+        return json.loads(rows[0]["state"]) if rows else None
 
     # --- ledger -------------------------------------------------------------------------------------------------
     def ledger(self, row: dict) -> None:

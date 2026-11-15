@@ -29,6 +29,8 @@ JOB_MODELS = {
     "weekly-reflection": OPUS,
     "coach-sheet": SONNET,
     "handoff": HAIKU,
+    "token-optimizer": HAIKU,  # a Sonnet second look only when Haiku flags one job (gateway/daily_jobs.py)
+    "research-scan": SONNET,
 }
 # DMs and the approval runs that resume them: Sonnet at low effort instead of the account default (Opus), the
 # interim cost relief in docs/v2 brief P0. One model for both keeps the session's cache. Env overrides for a test.
@@ -45,6 +47,8 @@ JOB_LIMITS = {
     "coach-sheet": (1, 0.25),  # lean: one words-only call (tools/coach_sheet.py)
     "approval": (12, 0.75),
     "handoff": (4, 0.15),
+    "token-optimizer": (3, 0.30),  # lean: one structured answer per call, at most two calls
+    "research-scan": (16, 1.50),  # lean: web search and fetch only
     "browser": (40, 1.50),  # one form fill or submit (gateway/browser_agent.py)
     # A DM resumes its session; --max-budget-usd counts only this invocation (CLI reference), so it caps one
     # message. Sonnet at low effort; the audited Opus max was $2.53 (docs/v2/reports/P0-ledger.md).

@@ -76,7 +76,7 @@ def test_failure_posts_once_per_streak(tmp_path):
 def test_models_are_pinned_per_job():
     assert ping_policy.JOB_MODELS["sweep"] == "claude-haiku-5-5"
     assert set(ping_policy.JOB_MODELS) == {"sweep", "morning-brief", "evening-checkin", "weekly-reflection",
-                                           "coach-sheet", "handoff"}
+                                           "coach-sheet", "handoff", "token-optimizer", "research-scan"}
 
 
 def test_due_timers_post_once_and_keep_future(tmp_path):
