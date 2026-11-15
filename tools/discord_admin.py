@@ -240,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # Discord refused (DiscordError) or the network failed
         print(json.dumps({"error": f"{type(exc).__name__}: {str(exc)[:200]}"}))
         return 4
-    print(json.dumps(out, ensure_ascii=False, indent=1))
+    print(json.dumps(out, ensure_ascii=True, indent=1))  # ASCII-safe: Windows consoles choke on emoji
     return 0
 
 
