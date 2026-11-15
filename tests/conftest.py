@@ -41,3 +41,12 @@ def _no_real_model_key(monkeypatch):
 
     monkeypatch.delenv("JUNO_V2_API_KEY", raising=False)
     monkeypatch.setattr(token_store, "load_late_secrets", lambda: [])
+
+
+@pytest.fixture(autouse=True)
+def _fresh_conversation_clock():
+    """The bridge remembers when it last talked in each DM (mid-conversation: no working line). Tests start cold."""
+    import slack_bridge
+    slack_bridge._last_exchange.clear()
+    yield
+    slack_bridge._last_exchange.clear()

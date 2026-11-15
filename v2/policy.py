@@ -26,6 +26,7 @@ class RunState:
     tools: tuple[str, ...]
     budget: config.Budget
     tainted: bool = False
+    tool_tainted: bool = False  # a tool result in this run carried outside text (persists on the thread)
     cost: float = 0.0
     calls: int = 0
     proposals: list[dict] = field(default_factory=list)
@@ -80,6 +81,7 @@ class Policy:
     def on_result(self, run: RunState, spec: ToolSpec, args: dict, result) -> None:
         if spec.returns_untrusted and getattr(result, "untrusted_text", False):
             run.tainted = True
+            run.tool_tainted = True
         run.touched.extend(getattr(result, "touched", []) or [])
         self.audit("v2_tool", {"run_id": run.run_id, "tool": spec.name, "tier": spec.tier.value,
                                "tainted": run.tainted, "error": bool(getattr(result, "is_error", False))})

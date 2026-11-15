@@ -310,13 +310,73 @@ WORKING_LINES = (
 RECENT = 8
 _recent_working: list[str] = []
 
+# When his message names a topic, the working line says what Juno is about to look at (Michael 2026-11-13: "All
+# right, let me see what's going on with the grocery stuff" beats a generic "On it"). First match wins; code only,
+# so the line still goes up the moment the DM lands.
+TOPIC_LINES: tuple[tuple[re.Pattern, tuple[str, ...]], ...] = tuple((re.compile(p, re.I), lines) for p, lines in (
+    (r"\bgrocer|\bshopping list|\bpantry|\bcostco|\bkroger|\bpublix",
+     ("Alright, let me see what's going on with the grocery stuff.", "Grocery stuff. Checking the list…")),
+    (r"\bdating|\bspeed dat|\bdate night|\bmixer|\bsingles",
+     ("Ooh, dating stuff. Let me look. 😏", "Checking the dating front…")),
+    (r"\bevents?\b|\btickets?\b|\bconcert|\bshow\b|\bthings to do|\bthis weekend",
+     ("Let me see what's happening around you…", "Looking at events. Hold my coffee.")),
+    (r"\bcalendar|\bschedul|\bmeeting|\bappointment|\bfree (?:time|slot)|\bwhat's (?:on )?(?:today|tomorrow)",
+     ("Pulling up your calendar…", "Let me check your calendar.")),
+    (r"\bremind|\breminder|\bdon't let me forget",
+     ("Writing that down before you forget it. 😉", "Noting it…")),
+    (r"\bemail|\binbox|\bgmail|\bmail\b|\bdraft|\breply to|\brespond to",
+     ("Checking your inbox…", "Let me look through your mail.")),
+    (r"\bworkout|\blift|\bgym|\bhevy|\bcoach|\btraining|\bsleep|\bweight\b|\bmacros",
+     ("Checking your training log…", "Let me look at the training side.")),
+    (r"\bbill|\bpay\b|\bpaid|\bbank|\btax|\bmoney|\bbudget|\bspend",
+     ("Looking at the money side…", "Checking the numbers. Carefully.")),
+    (r"\bbirthday|\bgift|\bmom\b|\bdad\b|\banniversar",
+     ("Let me check on that…", "Looking up the people stuff…")),
+    (r"youtube|youtu\.be|\bvideo",
+     ("Pulling up that video…", "Let me see what the video says.")),
+    (r"\bpart\b|\bwarranty|\brecall|\bprice\b|\bhow much|\bwhere can i (?:get|buy)",
+     ("Let me look that up properly…", "Price hunting. Respectfully.")),
+    (r"\bresearch|\blook into|\bwhat's new|\bfind out",
+     ("Digging into that…", "Let me research that one.")),
+    (r"\bweather|\brain\b|\bforecast",
+     ("Checking the sky…",)),
+))
+# A reply within this long of the last message either way is the same conversation: no working line, just "typing…"
+CONVERSATION_GAP = timedelta(minutes=10)
+_last_exchange: dict[str, datetime] = {}  # channel -> last message to or from Michael (in memory; a restart forgets)
 
-def working_text(pick=None) -> str:
+
+def working_text(pick=None, text: str = "") -> str:
     import random
     pick = pick or random.choice
-    line = pick([w for w in WORKING_LINES if w not in _recent_working])
+    for pattern, lines in TOPIC_LINES:
+        if text and pattern.search(text):
+            fresh = [w for w in lines if w not in _recent_working] or list(lines)
+            line = pick(fresh)
+            break
+    else:
+        line = pick([w for w in WORKING_LINES if w not in _recent_working])
     _recent_working[:] = (_recent_working + [line])[-RECENT:]
     return f"_{line}_"
+
+
+def note_exchange(channel: str, now: datetime | None = None) -> None:
+    _last_exchange[channel] = now or datetime.now(timezone.utc)
+
+
+def mid_conversation(channel: str, now: datetime | None = None) -> bool:
+    last = _last_exchange.get(channel)
+    return bool(last) and (now or datetime.now(timezone.utc)) - last <= CONVERSATION_GAP
+
+
+def _typing(client, channel: str) -> None:
+    """Discord's "Juno is typing…" (about 10 s per call). Slack has no bot equivalent, so it's a no-op there."""
+    try:
+        fn = getattr(client, "typing", None)
+        if fn:
+            fn(channel=channel)
+    except Exception as exc:  # cosmetic
+        LOG.info("typing failed: %s", exc)
 
 
 def split_reaction(text: str) -> tuple[str | None, str]:
@@ -490,21 +550,31 @@ _working_for: dict[str, str] = {}  # channel -> the working line already posted 
 _working_lock = threading.Lock()
 
 
-def acknowledge(client, channel: str, ts: str, latency: float | None = None) -> None:
+def acknowledge(client, channel: str, ts: str, latency: float | None = None, text: str = "") -> None:
     """The moment a DM lands: the eyes on it, then the working line, both before the 4 s burst wait (Michael
-    2026-11-08: the eyes first, then the working line right away). One working line per burst."""
+    2026-11-08: the eyes first, then the working line right away). One working line per burst. In the middle of a
+    back-and-forth there is no working line, only "typing…" (Michael 2026-11-13: "I'm on it" mid-conversation
+    sounds odd), and a fresh one names what it's about to look at when his message says."""
     started = time.monotonic()
     _react(client, channel, ts, seen_reaction(ts))
     seen_ms = (time.monotonic() - started) * 1000
+    talking = mid_conversation(channel)
+    note_exchange(channel)
     with _working_lock:
         posted = channel in _working_for
         if not posted:
-            try:
-                _working_for[channel] = client.chat_postMessage(channel=channel, text=working_text())["ts"]
-            except Exception as exc:
-                LOG.info("working line failed: %s", exc)
+            if talking:
+                _working_for[channel] = ""  # a burst marker with nothing to delete
+                _typing(client, channel)
+            else:
+                try:
+                    _working_for[channel] = client.chat_postMessage(channel=channel,
+                                                                    text=working_text(text=text))["ts"]
+                except Exception as exc:
+                    LOG.info("working line failed: %s", exc)
     LOG.info("DM in: delivery took %s, eyes %.0f ms, working line %s",
-             "?" if latency is None else f"{latency:.1f} s", seen_ms, "already up" if posted else "posted")
+             "?" if latency is None else f"{latency:.1f} s", seen_ms,
+             "already up" if posted else ("typing only (mid-conversation)" if talking else "posted"))
 
 
 def answer_batch(client, bridge: "Bridge", channel: str, items: list[dict]) -> None:
@@ -525,16 +595,25 @@ def answer_batch(client, bridge: "Bridge", channel: str, items: list[dict]) -> N
         _delete(client, channel, working)
         _react(client, channel, last, done_reaction())
         return
-    if not working:
+    if working is None and not mid_conversation(channel):  # never acknowledged (a direct call or a retry)
         try:
-            working = client.chat_postMessage(channel=channel, text=working_text())["ts"]
+            working = client.chat_postMessage(channel=channel, text=working_text(text=items[0]["text"]))["ts"]
         except Exception as exc:
             LOG.info("working line failed: %s", exc)
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    typing_stop = threading.Event()
+
+    def keep_typing() -> None:  # "typing…" lasts about 10 s on Discord; v1 answers can take a minute
+        while not typing_stop.wait(8):
+            _typing(client, channel)
+    _typing(client, channel)
+    threading.Thread(target=keep_typing, daemon=True).start()
     try:
         reply = bridge.handle_dm(channel, items[-1]["user"], "\n\n".join(i["text"] for i in items),
                                  dedupe=f"{channel}:{last}")
     finally:
+        typing_stop.set()
+        note_exchange(channel)
         _delete(client, channel, working)
         for item in items:
             _react(client, channel, item["ts"], _seen_on.pop(item["ts"], "eyes"), remove=True)
@@ -643,11 +722,15 @@ class Bridge:
             # v2 can't take this one (not ported, no key, or it failed before doing anything): v1 answers (DV13)
             heartbeat("dm-v2", True, "handed to v1")
             from_v2 = self.v2.recent_lines(channel)
+        unanswered = "" if from_v2 else getattr(self.v2, "unanswered_lines", lambda _c: "")(channel)
         resume = self.sessions.get(channel)
         handoff = self.handoff(channel) if resume is None else ""
         prompt = ((f"[Where the last session left off]\n{handoff}\n\n" if handoff else "") +
                   (f"[Recent messages in this chat, answered by the lighter engine]\n{from_v2}\n\n"
                    if from_v2 else "") +
+                  (f"[Sent to him since his last message, by your timers; newest last. A short reply like \"I did\" "
+                   f"or \"yes\" answers the newest one, so don't change the subject]\n{unanswered}\n\n"
+                   if unanswered else "") +
                   f"[{self.channel.title()} DM from Michael]\n{text}\n\n(Always answer, even when he is only sharing news or a photo: "
                   "acknowledge it in a line or two. If it tells you something durable about him or someone in people/, "
                   "save it this session per the silent-learning rules without announcing it; the recap lists it. "
@@ -669,6 +752,13 @@ class Bridge:
         if self.v2.store.engine(channel) == "v2" and not result.is_error:
             self.v2.note_v1_reply(channel, text, result.text)  # so v2's next turn knows what v1 said
         return self._with_spend_notice(result.text)
+
+    def note_outbound(self, channel: str, text: str, source: str) -> None:
+        """A timer message, reminder or card reached his DM: keep it where his next DM's run will see it."""
+        try:
+            self.v2.note_outbound(channel, text, source)
+        except Exception as exc:  # bookkeeping: never fails the post
+            LOG.info("outbound note failed: %s", exc)
 
     def handoff(self, channel: str) -> str:
         """If this DM's session went quiet, ask it once for a short handoff note, keep it in state/handoff.md, and
@@ -971,7 +1061,7 @@ def build_app(bridge: Bridge, app=None):
             latency = time.time() - float(event.get("sent_at") or event["ts"])
         except (KeyError, TypeError, ValueError):
             latency = None
-        acknowledge(client, event["channel"], event["ts"], latency)  # eyes, then the working line, at once
+        acknowledge(client, event["channel"], event["ts"], latency, text=event.get("text") or "")
         saved = (save_files(event, client.token, bridge.root, hosts=getattr(client, "file_hosts", SLACK_FILE_HOSTS))
                  if event.get("files") else {})
         text = dm_text(event, saved)
@@ -1262,7 +1352,7 @@ def open_dm(client, user_id: str) -> str:
 
 
 def post_to_michael(client, bridge: Bridge, text: str, blocks: list[dict] | None = None, *,
-                    thread: list[str] | None = None) -> str | None:
+                    thread: list[str] | None = None, source: str = "ping") -> str | None:
     users = sorted(bridge.allowlist)
     if not users:
         LOG.error("no Slack user in me/notify-allowlist.json; cannot post")
@@ -1276,6 +1366,11 @@ def post_to_michael(client, bridge: Bridge, text: str, blocks: list[dict] | None
             ts = client.chat_postMessage(channel=channel, text=part)["ts"]
     if ts and thread:
         client.chat_postMessage(channel=channel, thread_ts=ts, text=brief_blocks.to_mrkdwn("\n".join(thread)))
+    if ts:
+        note = getattr(bridge, "note_outbound", None)
+        if note:  # so his next DM is read against what he was just sent
+            note(channel, "\n".join([text] + (thread or [])), source)
+        note_exchange(channel)
     return ts
 
 
@@ -1288,10 +1383,10 @@ def post_job(client, bridge: Bridge, job: str, text: str) -> str | None:
     elif job == "weekly-reflection":
         msgs = cards.reflection(text)
     else:
-        return post_to_michael(client, bridge, text)
+        return post_to_michael(client, bridge, text, source=job)
     ts = None
     for msg in msgs:
-        ts = post_to_michael(client, bridge, msg.text, msg.blocks, thread=msg.thread) or ts
+        ts = post_to_michael(client, bridge, msg.text, msg.blocks, thread=msg.thread, source=job) or ts
     if job == "morning-brief":
         post_drafts(client, bridge)
         post_people(client, bridge)
