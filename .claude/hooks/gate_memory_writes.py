@@ -11,6 +11,8 @@ Rules (checked against the target path, relative to the project root):
 - state/proposed-lessons.md -> always allowed (the reflector's only output).
 - observed/*.md (what Juno learns on its own, Michael 2026-11-07) -> allowed in any run, including unattended,
   as long as the file stays under OBSERVED_MAX_CHARS. The cap forces consolidation instead of endless growth.
+- knowledge/entries/ (the tracked, public half of the knowledge base) -> deny in Juno's own runs, so
+  nothing Juno reads on its own lands in the public repo; it changes through a PR. knowledge/local/ -> allowed.
 - Everything else -> allow.
 
 Reads the hook JSON on stdin. Prints a deny decision on stdout when blocking; exits 0 either way (exit 2 would also
@@ -28,6 +30,7 @@ PROTECTED_CONFIG_DIRS = (".claude",)
 MEMORY_DIRS = ("me", "learnings", "people")
 ALWAYS_ALLOWED = ("state/proposed-lessons.md",)
 OBSERVED_DIR = "observed"
+SHARED_KNOWLEDGE = "knowledge/entries"
 OBSERVED_MAX_CHARS = 8000
 
 
@@ -71,6 +74,9 @@ def decide(tool_input: dict, env: dict, root: Path) -> str | None:
         if env.get("COORDINATOR_ALLOW_CONFIG_EDITS") == "1" or "COORDINATOR_UNATTENDED" not in env:
             return None
         return f"Blocked: '{rel}' is coordinator identity/config. Juno's own runs can't change it; ask Michael to make the change from the Code tab."
+    if rel.startswith(SHARED_KNOWLEDGE + "/") and "COORDINATOR_UNATTENDED" in env:
+        return (f"Blocked: '{rel}' is the shared knowledge base, which changes through a pull request. "
+                "Write it to knowledge/local/ with python tools/knowledge.py add instead.")
     is_memory = first in MEMORY_DIRS or (first == "domains" and rel.endswith("/CONTEXT.md"))
     if is_memory and env.get("COORDINATOR_UNATTENDED") == "1":
         return f"Blocked: unattended runs may not write memory ('{rel}'). Put the proposal in state/proposed-lessons.md and ask Michael."

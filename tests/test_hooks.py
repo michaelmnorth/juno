@@ -188,3 +188,16 @@ def test_every_agent_tool_points_at_a_script_that_exists():
         tools = next(l for l in head.splitlines() if l.startswith("tools:"))
         for script in re.findall(r"python (tools/[\w./-]+?)[ *)]", tools):
             assert (ROOT / script).exists() or list(ROOT.glob(script + "*")), f"{agent.name}: {script}"
+
+
+def test_shared_knowledge_denied_in_junos_runs():
+    for flag in ("0", "1"):
+        out = run_hook("gate_memory_writes.py", "Edit", {"file_path": "knowledge/entries/ops/x.md"},
+                       {"COORDINATOR_UNATTENDED": flag})
+        assert decision(out) == "deny"
+
+
+def test_local_knowledge_allowed_in_junos_runs():
+    out = run_hook("gate_memory_writes.py", "Write", {"file_path": "knowledge/local/research/x.md", "content": "x"},
+                   {"COORDINATOR_UNATTENDED": "1"})
+    assert decision(out) == "allow"

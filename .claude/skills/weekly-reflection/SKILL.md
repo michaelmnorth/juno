@@ -26,4 +26,11 @@ description: Weekly review - runs the reflector over the week's logs and signals
    on the themes Michael is learning, and turn the strongest `system` ideas (at most 2) into cards: "Rewind saw X in
    <video>; it would change <agent or skill>. Draft it?" with Allow once / Deny. Allow once runs the
    `new-subagent` skill or a normal change proposal. Nothing is built without the tap.
-8. Log `logs/YYYY-MM-DD_1800_weekly-reflection.md`.
+8. **Knowledge base upkeep.** Run `python tools/knowledge.py recheck-tests --apply` (reruns the tests confirmed
+   entries cite; passing ones are re-verified for 90 more days), then `python tools/knowledge.py check` and
+   `python tools/knowledge.py recap --since <7 days ago>`. In the summary, one line each: entries added, confirmed,
+   retired, and the stale ones (past their review-by date) with a plain question for each ("Still true that X? I
+   last checked it Oct 3"). A failing test or a broken source is a problem line, not a joke. His answer comes back
+   to you: a yes with where he saw it is `confirm <id> --source michael:<what he said, date>`; a no is
+   `retire <id> --reason "..."`.
+9. Log `logs/YYYY-MM-DD_1800_weekly-reflection.md`.

@@ -29,6 +29,10 @@ domains/**/*.db
 domains/**/*.sqlite
 domains/**/*.jsonl
 
+# The knowledge base: knowledge/entries/ is shared and tracked; knowledge/local/ (personal, and everything Juno
+# writes on its own) stays on this PC
+knowledge/local/
+
 # Juno's silent memory is personal data and stays on this PC
 observed/*
 !observed/README.md

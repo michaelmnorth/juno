@@ -11,6 +11,9 @@ Juno's memory is files, so showing it is reading them and forgetting is deleting
 - Confirmed with Michael: `me/*.md` and `me/*.yaml`, `people/*.md`, `learnings/*.md`, `domains/*/CONTEXT.md`.
 - Picked up silently: `observed/voice.md`, `observed/preferences.md`, `observed/procedures.md`, `observed/people.md`,
   with every change in `observed/changelog.md`.
+- What Juno knows about systems, tools and research, each with a date and confirmed or unconfirmed:
+  `knowledge/entries/INDEX.md` (shared) and `knowledge/local/INDEX.md` (this PC). When you answer from an entry,
+  say whether it is confirmed and when it was last checked; an unconfirmed or stale one is "I think", not a fact.
 - Not memory, but records: `logs/`, `state/` (approvals, pings, drafts), `data/` (YouTube cache, finance ledger).
 
 ## Show ("what do you remember about watches")

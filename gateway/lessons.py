@@ -10,6 +10,7 @@ target: a card built from the reflector's output must not be able to change what
 from __future__ import annotations
 
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -42,6 +43,23 @@ def lesson_line(text: str, today: str | None = None) -> str:
     return f"- {body}"
 
 
+def _record(root: Path, target: str, line: str, change: dict, lines_old: str, today: str | None) -> str | None:
+    """The same lesson as a confirmed knowledge-base entry, citing the tap (tools/knowledge.py). Bookkeeping: a
+    failure here never undoes or fails the save."""
+    tools = str(Path(__file__).resolve().parents[1] / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        import knowledge
+        day = today or datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+        card = str(change.get("card") or "")
+        source = (f"card:{card}" if re.fullmatch(r"a-[0-9a-f]{8}", card) else
+                  f"michael: Save tap on weekly proposal {change.get('id') or '(no id)'}, {day}")
+        return knowledge.record_lesson(root, target=target, line=line, source=source, old=lines_old, today=day)["id"]
+    except Exception:  # noqa: BLE001 - never fail the save over the record
+        return None
+
+
 def apply(change: dict, root: Path, today: str | None = None) -> dict:
     """change = {"target", "old", "new"} from the card. Replaces the old line when it is there, else appends."""
     target = str(change.get("target") or "").strip().replace("\\", "/")
@@ -61,5 +79,6 @@ def apply(change: dict, root: Path, today: str | None = None) -> dict:
     else:
         lines.append(line)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return {"target": target, "line": line, "replaced": hit is not None, "already": False,
+    knowledge_id = _record(root, target, line, change, lines_old=old if hit is not None else "", today=today)
+    return {"knowledge_id": knowledge_id, "target": target, "line": line, "replaced": hit is not None, "already": False,
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
