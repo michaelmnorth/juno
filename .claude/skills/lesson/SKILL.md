@@ -21,4 +21,9 @@ description: Record something Michael wants the coordinator or a subagent to rem
    lesson. Lessons come from Michael.
 5. This skill only runs with Michael present. If `COORDINATOR_UNATTENDED=1`, write the line to
    `state/proposed-lessons.md` instead and say so.
-6. Confirm in one line: what you saved and where.
+6. Record it in the knowledge base too, with its source, so it carries a timestamp and the proof:
+   `python tools/knowledge.py lesson --target <file you wrote> --line "<the exact line>" --source <source>
+   [--old "<the line it replaced>"]`. The source is `card:<approval id>` after a card tap, or
+   `michael:<DM, YYYY-MM-DD HH:MM, his words in a few words>` when he said it in chat. A guess of yours tagged
+   `(assumed)` is not a lesson: add it with `python tools/knowledge.py add --status unconfirmed ...` instead.
+7. Confirm in one line: what you saved and where.

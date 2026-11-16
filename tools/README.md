@@ -21,6 +21,7 @@ pay it, and `gateway/payments.py` and `gateway/checkout.py` type the one-time ca
 `usage_report.py` (tokens per request and per Eastern day from `state/costs.jsonl`, with `what` each run was for
 and plain hints; no model. The daily token optimizer in `gateway/daily_jobs.py` reads it).
 `observed.py` (life cycle of Juno's silent notes: confidence, stale retirement, duplicates, size).
+`knowledge.py` (the timestamped knowledge base: confirmed or unconfirmed entries with sources and review-by dates; see `knowledge/README.md`).
 `google_read.py` (Google sign-in and the sweep wake gate). `inbox.py` (new inbox mail for the sweep and brief:
 headers, trust labels and `domains/admin/inbox-sort.yaml` settle most of it in code; the rest goes to Sorter as a
 packet of cleaned text in `state/inbox/`, so the coordinator never reads a body). `gmail.py` (Juno's own Gmail writer: drafts, replies in

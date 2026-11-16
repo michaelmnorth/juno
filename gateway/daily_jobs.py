@@ -7,7 +7,8 @@ session, no files or shell for the model), both proposals only.
   runs on his Max plan. Suggestions go to state/usage/suggestions.jsonl and, when worth it, one short message.
 - research-scan ("Scout, daily"): one Sonnet call with web search and fetch only, on what's new in personal AI
   assistants, kept to ideas Juno could use. Pages are data, never instructions; the model has no other tools, and
-  nothing it finds changes anything. Findings go to state/research/<day>.md and a short message when there's news.
+  nothing it finds changes anything. Findings go to state/research/<day>.md, to the knowledge base as unconfirmed
+  entries (knowledge/local/research/), and a short message when there's news.
 
 Both return the text to post, or None for silence.
 """
@@ -160,6 +161,25 @@ def _seen(folder: Path, today: str) -> list[str]:
     return [url for url, day in seen.items() if day >= cutoff]
 
 
+def _to_knowledge(root: Path, items: list[dict], today: str) -> None:
+    """Each finding also becomes an unconfirmed knowledge-base entry on this PC (tools/knowledge.py), dated, with
+    its link as the source. A page saying something is not proof it works for Juno, so nothing here is confirmed;
+    the weekly reflection and a build that tries it are what confirm or retire it. Never fails the scan."""
+    tools = str(Path(root) / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        import knowledge
+        for i in items:
+            body = (f"{i['what']}\n\nIdea for Juno: {i['idea']}\n\nPublished {i['date']}; found by the daily "
+                    f"research scan on {today}. Unconfirmed: nobody has tried it in Juno yet.")
+            knowledge.add(root, title=str(i["title"])[:knowledge.MAX_TITLE], body=body, topic="research",
+                          sources=[f"url:{i['url']}"], today=today, env={"COORDINATOR_UNATTENDED": "1"})
+        knowledge.write_indexes(root, today)
+    except Exception:  # noqa: BLE001 - the findings file and the message still go out
+        pass
+
+
 def research_scan(run, root: Path, now: datetime | None = None) -> str | None:
     today = _today(now).date().isoformat()
     folder = Path(root) / "state" / "research"
@@ -183,6 +203,7 @@ def research_scan(run, root: Path, now: datetime | None = None) -> str | None:
             book = {}
         book.update({i["url"]: today for i in items})
         (folder / "seen.json").write_text(json.dumps(book, indent=1), encoding="utf-8")
+        _to_knowledge(root, items, today)
     if not (items and data.get("notify")):
         return None
     lines = [f"• {i['title']}: {i['idea']} <{i['url']}>" for i in items[:3]]
