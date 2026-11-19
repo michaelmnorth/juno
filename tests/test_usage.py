@@ -188,11 +188,27 @@ def test_research_scan_quiet_on_a_failed_run(tmp_path):
     assert daily_jobs.research_scan(run, tmp_path, NOW) is None
 
 
+def test_lift_video_scan_appends_to_its_living_file(tmp_path):
+    item = {**ITEM, "title": "Auto trim with pose", "url": "https://example.com/trim"}
+    run = FakeRun({"items": [item], "notify": True}, {"items": [{**item, "url": "https://example.com/more"}],
+                                                     "notify": False})
+    text = daily_jobs.run_job("lift-video-scan", run, tmp_path, NOW)
+    kw = run.calls[0]
+    assert kw["job"] == "lift-video-scan" and kw["allowed_tools"] == ("WebSearch", "WebFetch")
+    assert kw["lean_system"] == daily_jobs.LIFT_VIDEO_SYSTEM and "lift clips" in text
+    folder = tmp_path / "state" / "research" / "lift-video"
+    assert daily_jobs.run_job("lift-video-scan", run, tmp_path, NOW) is None  # nothing that changes the plan
+    living = (folder / "LIVING.md").read_text(encoding="utf-8")
+    assert living.count("# Lift video clips") == 1 and "example.com/trim" in living and "example.com/more" in living
+    assert not (tmp_path / "state" / "research" / "seen.json").exists()  # its own seen list, apart from the main scan
+
+
 # --- schedule ------------------------------------------------------------------------------------
 
 def test_daily_jobs_are_scheduled_and_lean():
     jobs = {j["job"]: j["trigger"] for j in slack_bridge.anchor_schedule(slack_bridge.load_proactivity(ROOT))}
     assert jobs["token-optimizer"]["hour"] == 6 and jobs["research-scan"]["hour"] == 12
+    assert jobs["lift-video-scan"]["hour"] == 12 and jobs["lift-video-scan"]["minute"] == 40
     assert set(daily_jobs.JOBS) <= set(slack_bridge.LEAN_JOBS)
     for job in daily_jobs.JOBS:
         assert job in ping_policy.JOB_MODELS and job in ping_policy.JOB_LIMITS
