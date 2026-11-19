@@ -297,6 +297,7 @@ def test_coach_sheet_waits_for_a_new_hevy_workout(tmp_path):
 
     run, calls = _runner({"added": 1, "updated": 0}, {"new_sessions": ["W2D1"]})
     assert slack_bridge.coach_sheet_due(tmp_path, run=run)
+    assert calls == ["tools/hevy_pull.py", "tools/coach_sheet.py", "tools/sheets.py"]  # cardio noted, model-free
     assert json.loads((tmp_path / "state" / "coach-sheet.json").read_text())["pending"]
 
     run, calls = _runner({"added": 0, "updated": 0}, {"new_sessions": ["W2D1"]})

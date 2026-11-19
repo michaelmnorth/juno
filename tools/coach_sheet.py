@@ -7,15 +7,26 @@ touches a cell number. Rules: domains/health/CONTEXT.md.
 
   python tools/coach_sheet.py sync [--plan state/sheet-plan.json]   with --plan, skip the pull and plan (the bridge
                                                                     already did both); prints {"ok", "message"}
+  python tools/coach_sheet.py note-cardio                           no model, no sheet: notes cardio-only workouts
+                                                                    (a treadmill walk) in state/cardio-log.jsonl;
+                                                                    the next sync message mentions them once
+
+The message always says where each new session went ("Logged as Week 2, Day 4.") and says so when that place was a
+best guess (sheets.placement_guess). After a session is fully logged, one line goes to state/workout-events.jsonl
+(once per workout, with its start and end time) and each module named under `after_log:` in the coach-sheet config
+runs: tools/<name>.py, function after_log(event) -> str | None. That is where Phase 2 (lift video clips) plugs in;
+a failing hook is logged and never undoes or blocks the sheet.
 Writes go through sheets.write as an unattended run: sheet.append_log must be auto, and moves, clears and overwrites
 are refused here (those stay in the Code tab with Michael).
 """
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,6 +39,10 @@ from google_read import BAD_INPUT, OK, GoogleError  # noqa: E402
 
 ROOT = google_read.ROOT
 PLAN = ROOT / "state" / "sheet-plan.json"
+CARDIO_LOG = ROOT / "state" / "cardio-log.jsonl"
+EVENTS = ROOT / "state" / "workout-events.jsonl"
+CARDIO_LOOKBACK_DAYS = 21  # the first run doesn't backfill a year of walks
+HOOK_NAME = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 UNATTENDED = {"COORDINATOR_UNATTENDED": "1"}
 MODEL = "claude-sonnet-5-5"
 SYSTEM = ("You tidy a powerlifter's own workout notes and write his short update to his coach. "
@@ -65,11 +80,25 @@ def parse_words(text: str) -> dict:
             "line": str(out.get("line") or "").strip()}
 
 
-def message(new: list[dict], words: dict, first: dict, second: dict | None, issues: list[str]) -> str | None:
+def placement(session: dict) -> str:
+    """'Logged as Week 2, Day 4.' plus the reason when the place was a best guess."""
+    m = re.match(r"W(\d+)D(\d+)", session["label"])
+    week, day = session.get("week") or int(m.group(1)), session.get("day") or int(m.group(2))
+    line = f"Logged as Week {week}, Day {day}"
+    if session.get("date"):
+        line += f" ({session['date']})"
+    if session.get("guess"):
+        return f"{line}. That's my best guess: {session['guess']}. Tell me if it belongs somewhere else."
+    return line + "."
+
+
+def message(new: list[dict], words: dict, first: dict, second: dict | None, issues: list[str],
+            cardio: list[dict] = (), extra: list[str] = ()) -> str | None:
     labels = {s["label"] for s in new}
     if not labels and not first["written"]:
         return None
     parts = [words.get("line") or f"{', '.join(sorted(labels)) or 'Your workout'} is on the coach's sheet. 🫡"]
+    parts += [placement(s) for s in new]
     for s in new:
         note = words["coach"].get(s["label"])
         if note:
@@ -81,15 +110,106 @@ def message(new: list[dict], words: dict, first: dict, second: dict | None, issu
     parts += [i for i in issues if i.startswith(prefixes)]
     if any(not words["coach"].get(s["label"]) for s in new):
         parts.append("The numbers are in. The notes didn't come through this time; I'll try again on the next check.")
+    if cardio:
+        parts.append("Kept off the coach's sheet, noted here instead: " + "; ".join(cardio_text(c) for c in cardio)
+                     + ".")
+    parts += [x for x in extra if x]
     return "\n\n".join(parts)
 
 
-def sync(plan_path: Path = PLAN, fresh: bool = True, runner=None, tool_env=UNATTENDED) -> dict:
+# --- cardio-only sessions: noted, never on the sheet ----------------------------------------------
+
+def cardio_text(entry: dict) -> str:
+    bits = []
+    for e in entry.get("exercises", []):
+        size = ", ".join(x for x in (f"{e['minutes']} min" if e.get("minutes") else "",
+                                     f"{e['miles']:g} mi" if e.get("miles") else "") if x)
+        bits.append(f"{e['title'].lower()}{f' ({size})' if size else ''}")
+    return f"{' and '.join(bits) or 'cardio'} on {entry.get('date', '?')}"
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def note_cardio(db, log: Path = CARDIO_LOG, now: datetime | None = None) -> list[dict]:
+    """Append cardio-only workouts not noted yet; returns the new entries. Model-free, local only."""
+    now = now or datetime.now(timezone.utc)
+    since = (now - timedelta(days=CARDIO_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
+    seen = {e.get("id") for e in _read_jsonl(log)}
+    fresh = [dict(w, noted=now.isoformat(timespec="seconds"), told=False)
+             for w in sheets.cardio_workouts(db, since) if w["id"] not in seen]
+    if fresh:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as f:
+            for e in fresh:
+                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    return fresh
+
+
+def untold_cardio(log: Path = CARDIO_LOG) -> list[dict]:
+    return [e for e in _read_jsonl(log) if not e.get("told")]
+
+
+def mark_told(ids: set[str], log: Path = CARDIO_LOG) -> None:
+    if not ids:
+        return
+    entries = _read_jsonl(log)
+    for e in entries:
+        if e.get("id") in ids:
+            e["told"] = True
+    log.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries), encoding="utf-8")
+
+
+# --- after logging: the hook Phase 2 plugs into ---------------------------------------------------
+
+def after_log(sessions: list[dict], block, hooks=(), events: Path = EVENTS, loader=None) -> list[str]:
+    """One event per newly, fully logged workout (never twice), then each hook in order. Returns the hooks' lines
+    for the message. A hook that fails is reported on stderr and skipped; the sheet is already done."""
+    loader = loader or importlib.import_module
+    seen = {e.get("workout_id") for e in _read_jsonl(events)}
+    out = []
+    for s in sessions:
+        if not s.get("id") or s["id"] in seen:
+            continue
+        event = {"type": "workout.logged", "workout_id": s["id"], "label": s["label"], "block": block,
+                 "week": s.get("week"), "day": s.get("day"), "date": s.get("date"), "start": s.get("start"),
+                 "end": s.get("end"), "title": s.get("title"), "guess": s.get("guess"),
+                 "lifts": s.get("lifts", []), "logged": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        events.parent.mkdir(parents=True, exist_ok=True)
+        with events.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        seen.add(s["id"])
+        for name in hooks or ():
+            if not HOOK_NAME.match(str(name)):
+                print(f"after_log: skipped hook {name!r} (not a tools/ module name)", file=sys.stderr)
+                continue
+            try:
+                line = loader(name).after_log(event)
+            except Exception as exc:  # noqa: BLE001  (a hook never breaks the sync)
+                print(f"after_log: hook {name} failed: {exc}", file=sys.stderr)
+                continue
+            if line:
+                out.append(str(line))
+    return out
+
+
+def sync(plan_path: Path = PLAN, fresh: bool = True, runner=None, tool_env=UNATTENDED,
+         cardio_log: Path = CARDIO_LOG, events: Path = EVENTS, loader=None) -> dict:
     """{"ok": bool, "message": str | None}. ok False = try again later (numbers may already be in)."""
     cfg, token = sheets.config(), google_read.access_token()
     if fresh:
         db = hevy_pull.connect()
         hevy_pull.pull(db, hevy_pull.api_key())
+        note_cardio(db, cardio_log)
         block = sheets.current_block(db)
         tab, gid = sheets.block_tab(cfg["sheet_id"], block, token)
         p = sheets.plan(sheets.read_tab(cfg["sheet_id"], tab, token), sheets.block_workouts(db, block),
@@ -117,7 +237,12 @@ def sync(plan_path: Path = PLAN, fresh: bool = True, runner=None, tool_env=UNATT
         elif ok:
             second = first
     plan_path.write_text(json.dumps(p, indent=1), encoding="utf-8")
-    return {"ok": ok, "message": message(new, words, first, second, p["issues"]),
+    extra = after_log(new, p.get("block"), cfg.get("after_log") or (), events, loader) if ok else []
+    cardio = untold_cardio(cardio_log)
+    text = message(new, words, first, second, p["issues"], cardio, extra)
+    if text and cardio:
+        mark_told({c["id"] for c in cardio}, cardio_log)
+    return {"ok": ok, "message": text,
             "written": first["written"] + (second["written"] if second and second is not first else 0)}
 
 
@@ -129,10 +254,14 @@ def main(argv: list[str]) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("sync")
     s.add_argument("--plan", default="")
+    sub.add_parser("note-cardio")
     try:
         args = p.parse_args(argv)
     except SystemExit:
         return BAD_INPUT
+    if args.cmd == "note-cardio":
+        print(json.dumps({"noted": [cardio_text(e) for e in note_cardio(hevy_pull.connect())]}))
+        return OK
     try:
         google_read.load_secrets()
         out = sync(Path(args.plan) if args.plan else PLAN, fresh=not args.plan)

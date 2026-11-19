@@ -4,7 +4,13 @@ Rules (Michael, from Muse's handoff and 2026-11-08, also in domains/health/CONTE
 - Juno writes only Actual, LsRPE and an "MN:" line in Notes. Coach text and prescriptions are never changed.
 - Actual = the top working load (lb) of the sets that row prescribes; AMRAP rows = the best set's reps; an exercise
   prescribed but not logged = "skipped". LsRPE = RPE of the row's last set. Extra unprescribed sets are dropped.
-- Weeks go by the order of days done in the block, not the calendar: the first Day 4 done is Week 1's Day 4.
+- Weeks go by the order of days done in the block, not the calendar: the first Day 4 done is Week 1's Day 4. So
+  running a week behind, or taking a week off, never shifts anything. When the order alone can't settle it (a day
+  skipped in an earlier week, a day done twice, two of the same day on one date), the session keeps its by-order
+  place and carries a "guess" reason, so Juno's message says it was a best guess and he can say where it belongs.
+- Cardio-only workouts (a treadmill walk, a bike ride: no reps, no load) never go on the sheet and never take a
+  week's place, even when started from a Forge routine; tools/coach_sheet.py notes them locally instead. Cardio
+  logged inside a lifting session (a treadmill warm-up) is not reported as "not on the sheet".
 - A cell is written only when empty or already the same; anything else is a conflict, reported and left alone.
 - Notes: Michael's own Hevy notes (stream of consciousness) become one cleaned "MN: ..." line at the top of the
   exercise's first-row Notes cell; the coach's text stays below it untouched. The plan carries the raw notes; Juno
@@ -102,27 +108,76 @@ def _norm(text: str) -> str:
 
 # --- Hevy side ------------------------------------------------------------------------------------
 
+CARDIO_RE = re.compile(r"treadmill|walking|\bwalk\b|running|\brun\b|jogging|cycling|\bbike\b|elliptical|"
+                       r"rowing machine|\brower\b|stair|step ?mill|spinning|cardio|hiking|swimming|jump rope|ski ?erg",
+                       re.I)
+
+
+def is_cardio(title: str, sets: list[dict]) -> bool:
+    """Cardio = a cardio name and no set with reps or load (a walking lunge has reps; a farmer's walk has load)."""
+    return bool(CARDIO_RE.search(title or "")) and not any((s.get("reps") or 0) > 0 or (s.get("kg") or 0) > 0
+                                                            for s in sets)
+
+
+def _workout_exercises(db: sqlite3.Connection, wid: str) -> list[dict]:
+    sets = db.execute("SELECT exercise_index, exercise, set_type, weight_kg, reps, rpe, distance_m, duration_s "
+                      "FROM hevy_sets WHERE workout_id = ? ORDER BY exercise_index, set_index", (wid,)).fetchall()
+    notes = dict(db.execute("SELECT exercise_index, notes FROM hevy_exercise_notes WHERE workout_id = ?",
+                            (wid,)).fetchall())
+    exercises: dict[int, dict] = {}
+    for idx, ex, kind, kg, reps, rpe, dist, secs in sets:
+        e = exercises.setdefault(idx, {"title": ex, "sets": [], "all": [], "notes": notes.get(idx, "")})
+        e["all"].append({"kg": kg, "reps": reps, "m": dist, "s": secs})
+        if kind != "warmup":
+            e["sets"].append({"kg": kg, "reps": reps, "rpe": rpe})
+    out = []
+    for i in sorted(exercises):
+        e = exercises[i]
+        e["cardio"] = is_cardio(e["title"], e.pop("all"))
+        out.append(e)
+    return out
+
+
+def cardio_only(exercises: list[dict]) -> bool:
+    return bool(exercises) and all(e.get("cardio") for e in exercises)
+
+
+def cardio_workouts(db: sqlite3.Connection, since: str) -> list[dict]:
+    """Cardio-only workouts started on or after `since` (ISO), any title: what the sheet leaves out on purpose."""
+    out = []
+    for wid, title, start, end in db.execute("SELECT id, title, start_time, end_time FROM hevy_workouts "
+                                             "WHERE start_time >= ? ORDER BY start_time", (since,)).fetchall():
+        rows = db.execute("SELECT exercise_index, exercise, weight_kg, reps, distance_m, duration_s FROM hevy_sets "
+                          "WHERE workout_id = ? ORDER BY exercise_index, set_index", (wid,)).fetchall()
+        per: dict[int, dict] = {}
+        for idx, ex, kg, reps, dist, secs in rows:
+            e = per.setdefault(idx, {"title": ex, "sets": []})
+            e["sets"].append({"kg": kg, "reps": reps, "m": dist or 0, "s": secs or 0})
+        exercises = [per[i] for i in sorted(per)]
+        if not exercises or not all(is_cardio(e["title"], e["sets"]) for e in exercises):
+            continue
+        out.append({"id": wid, "title": title, "start": start, "end": end, "date": (start or "")[:10],
+                    "exercises": [{"title": e["title"], "minutes": round(sum(x["s"] for x in e["sets"]) / 60),
+                                   "miles": round(sum(x["m"] for x in e["sets"]) / 1609.344, 2)}
+                                  for e in exercises]})
+    return out
+
+
 def block_workouts(db: sqlite3.Connection, block: int) -> dict[int, list[dict]]:
-    """Forge workouts of this block, per day, in the order done (that order is the week)."""
+    """Forge workouts of this block, per day, in the order done (that order is the week). Cardio-only ones are left
+    out: they never take a week's place."""
     out: dict[int, list[dict]] = {}
-    rows = db.execute("SELECT id, title, start_time, description FROM hevy_workouts WHERE title LIKE ? "
+    rows = db.execute("SELECT id, title, start_time, end_time, description FROM hevy_workouts WHERE title LIKE ? "
                       "ORDER BY start_time", (f"%| B{block} |%",)).fetchall()
-    for wid, title, start, desc in rows:
+    for wid, title, start, end, desc in rows:
         m = re.search(r"\bDay (\d+)\b", title or "")
         if not m:
             continue
-        sets = db.execute("SELECT exercise_index, exercise, set_type, weight_kg, reps, rpe FROM hevy_sets "
-                          "WHERE workout_id = ? ORDER BY exercise_index, set_index", (wid,)).fetchall()
-        notes = dict(db.execute("SELECT exercise_index, notes FROM hevy_exercise_notes WHERE workout_id = ?",
-                                (wid,)).fetchall())
-        exercises: dict[int, dict] = {}
-        for idx, ex, kind, kg, reps, rpe in sets:
-            e = exercises.setdefault(idx, {"title": ex, "sets": [], "notes": notes.get(idx, "")})
-            if kind != "warmup":
-                e["sets"].append({"kg": kg, "reps": reps, "rpe": rpe})
-        out.setdefault(int(m.group(1)), []).append({"id": wid, "title": title, "start": start,
-                                                    "notes": (desc or "").strip(),
-                                                    "exercises": [exercises[i] for i in sorted(exercises)]})
+        exercises = _workout_exercises(db, wid)
+        if cardio_only(exercises):
+            continue
+        out.setdefault(int(m.group(1)), []).append({"id": wid, "title": title, "start": start, "end": end,
+                                                    "notes": (desc or "").strip(), "exercises": exercises})
     return out
 
 
@@ -210,7 +265,7 @@ def plan(rows: list[list[str]], workouts: dict[int, list[dict]], names: dict[str
             w = weeks[wk]
             found = match(groups, workout["exercises"], names, combined)
             used = {id(p) for e in found.values() if e for p in e.get("parts", [e])}
-            for extra in (e for e in workout["exercises"] if id(e) not in used):
+            for extra in (e for e in workout["exercises"] if id(e) not in used and not e.get("cardio")):
                 issues.append(f"Day {day} week {wk + 1}: {extra['title']} is logged but not on the sheet")
             first = len(cells), len(notes)
             for gi, group in enumerate(groups):
@@ -233,7 +288,10 @@ def plan(rows: list[list[str]], workouts: dict[int, list[dict]], names: dict[str
                                   "raw": raw, "mn": kept})  # an MN line already there stays; None = to write
             # The copy-paste note for the coach: W1D4, then the session. "new" = this run puts something on the sheet.
             sessions.append({
-                "label": f"W{wk + 1}D{day}", "date": workout["start"][:10], "title": workout["title"],
+                "label": f"W{wk + 1}D{day}", "week": wk + 1, "day": day, "id": workout.get("id"),
+                "start": workout["start"], "end": workout.get("end"),
+                "guess": placement_guess(workouts, day, wk, workout, matched=any(found.values())),
+                "date": workout["start"][:10], "title": workout["title"],
                 "new": any(c["status"] == "write" for c in cells[first[0]:])
                 or any(n["mn"] is None for n in notes[first[1]:]),
                 "lifts": [{"sheet": g["name"], "hevy": found[gi]["title"], "sets": _sets_text(found[gi])}
@@ -261,6 +319,30 @@ def plan(rows: list[list[str]], workouts: dict[int, list[dict]], names: dict[str
     sessions.sort(key=lambda s: s["date"])
     return {"tab": tab, "cells": cells, "notes": notes, "issues": issues, "counts": dict(counts),
             "sessions": sessions}
+
+
+def placement_guess(workouts: dict[int, list[dict]], day: int, wk: int, workout: dict,
+                    matched: bool = True) -> str | None:
+    """Why Week wk+1 for this Day is only a best guess, or None when the order settles it. The place stays by order
+    either way (that has been right so far); this only tells Michael when to look.
+
+    "Others" are the other days' counts before this session started: in the normal run of a block they sit at this
+    week or one behind (Week 2 Day 1 comes after Week 1 Days 2 to 4), behind schedule or not."""
+    week, start = wk + 1, workout["start"]
+    others = [sum(1 for w in done if w["start"] < start) for d, done in workouts.items() if d != day]
+    ahead = max(others, default=0)
+    same_date = [w for w in workouts.get(day, []) if w is not workout and w["start"][:10] == start[:10]]
+    if same_date:
+        return f"there are two Day {day} sessions on {start[:10]}, so one of them may be a repeat"
+    if week < ahead:
+        return (f"your other days are already on Week {ahead}, so if Day {day} was skipped in an earlier week, "
+                f"this one may belong to Week {ahead}")
+    if others and week > ahead + 1:
+        return (f"Day {day} is ahead of your other days (they're on Week {ahead}), so this may be a repeat of an "
+                f"earlier week")
+    if not matched:
+        return f"none of its lifts matched the sheet's Day {day}"
+    return None
 
 
 def note_value(entry: dict) -> str:
