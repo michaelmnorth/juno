@@ -218,6 +218,11 @@ def coach_sheet_due(root: Path = ROOT, force: bool = False, run=None) -> bool:
 
     try:
         pulled = tool("tools/hevy_pull.py", "pull")
+        if pulled.get("added") or pulled.get("updated"):
+            try:  # a treadmill-only walk: noted locally, never on the sheet; the next sync message mentions it
+                tool("tools/coach_sheet.py", "note-cardio")
+            except (RuntimeError, ValueError, OSError) as exc:
+                LOG.warning("cardio note failed: %s", exc)
         if not (force or pending or pulled.get("added") or pulled.get("updated")):
             return False
         new = tool("tools/sheets.py", "plan", "--block", "current", "--out", "state/sheet-plan.json")["new_sessions"]

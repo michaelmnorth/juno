@@ -32,7 +32,9 @@ with the system Python.
 `hevy_pull.py` (Hevy workouts into `data/health.sqlite`: `pull`, `summary`, `lift`; key from 1Password item
 Hevy-Juno; read-only toward Hevy; also keeps each exercise's notes and the routine id).
 `sheets.py` (the coach's block tab: `plan` what Hevy says belongs there, `write` Actual, LsRPE and "MN:" notes;
-weeks by order done, never overwrites a filled cell or the coach's text; config in `domains/health/private/coach-sheet.yaml`).
+weeks by order done, never overwrites a filled cell or the coach's text; flags a best-guess week; cardio-only workouts
+never go on it; config in `domains/health/private/coach-sheet.yaml`). `coach_sheet.py` (the lean sync: says where each
+session went, notes cardio-only sessions, and runs the `after_log:` hooks once a session is fully logged).
 
 Planned (see docs/04-PLAN.md): `health_import.py` (iCloud JSON drop → health.sqlite), `withings_pull.py`
 (likely not needed: the scale writes to Apple Health), `finance_fetch.py` (Plaid/SimpleFIN → finance.sqlite,
