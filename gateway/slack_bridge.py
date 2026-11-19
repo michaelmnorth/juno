@@ -183,7 +183,8 @@ def anchor_schedule(cfg: dict) -> list[dict]:
     if "coach_sheet_nightly" in anchors:
         h, m = hm(anchors["coach_sheet_nightly"])
         jobs.append({"job": "coach-sheet", "trigger": {"hour": h, "minute": m, "timezone": tz}})
-    for key, job in (("token_optimizer", "token-optimizer"), ("research_scan", "research-scan")):
+    for key, job in (("token_optimizer", "token-optimizer"), ("research_scan", "research-scan"),
+                     ("lift_video_scan", "lift-video-scan")):
         if key in anchors:
             h, m = hm(anchors[key])
             jobs.append({"job": job, "trigger": {"hour": h, "minute": m, "timezone": tz}})
